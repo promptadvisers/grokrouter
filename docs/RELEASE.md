@@ -25,6 +25,7 @@ If Xcode Command Line Tools are missing, macOS opens Apple's installer. The view
 8. Complete install → restore → reinstall with the exact build.
 9. Create a genuinely new Bot and complete `docs/FRESH-BOT-ACCEPTANCE.md`.
 10. Record the result in `docs/TEST-MATRIX.md`, commit, and wait for green CI.
+11. After the version bump has merged to `main`, create the source tag from the Actions tab: run **Tag source release** with the exact version (for example `0.1.0-beta.46`). The workflow refuses to tag a commit whose `package.json`, runtime and Windows package versions, `scripts/install-macos.sh` source ref, or README pinned command disagree with the requested version, and refuses an existing tag. Pushing the tag by hand from a clone with tag-push rights is equivalent.
 
 ## Compatibility changes
 
