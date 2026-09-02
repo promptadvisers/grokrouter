@@ -1396,6 +1396,11 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let digest = SHA256.hash(data: archive).map { String(format: "%02x", $0) }.joined()
         let installAttempt = Self.makeInstallAttemptID()
         let installPayload = Data("\nGROKBOT_ROUTER_INSTALL_OK\n\nGROKBOT_ROUTER_INSTALL_OK\n".utf8).base64EncodedString()
+        // The typed command itself stays visible in the Bot terminal until the
+        // output scrolls it away, and the OCR completion loop reads that text
+        // too. Keep every sentinel base64-encoded in the typed command so the
+        // failure marker can only appear when the installer actually prints it.
+        let failurePayload = Data("\nGROKROUTER_\(installAttempt)_INSTALL_FAILED_UNKNOWN_CODE_".utf8).base64EncodedString()
         // Short, quote-free commands always return to a usable shell prompt if
         // the VNC target changes mid-transfer. A retry starts from an empty file.
         var encodedChunks: [String] = []
@@ -1418,7 +1423,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             "rm -rf /tmp/grokbot-router-installer/payload",
             "mkdir -p /tmp/grokbot-router-installer/payload",
             "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; echo GROKROUTER_\(installAttempt)_INSTALL_FAILED_UNKNOWN_CODE_$code; fi"
+            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; printf %s \(failurePayload) | base64 -d; echo $code; fi"
         ])
         appendLog("Transferring a SHA-256-verified payload into the Bot computer…")
         let installVNC = try await typeRemoteCommandsResilient(commands, client: client, pageSession: pageSession)

@@ -42,6 +42,11 @@ test("Windows installer preserves verified terminal transport and restore", () =
   assert.match(main, /typeRemoteCommandsResilient/);
   assert.match(main, /INSTALL_PHASES/);
   assert.match(main, /INSTALLFAILED/);
+  assert.match(main, /const failurePayload = Buffer\.from/);
+  assert.match(main, /printf %s \$\{failurePayload\} \| base64 -d; echo \$code/);
+  // The typed command must never carry a plain-text sentinel that OCR could
+  // read from the echoed command line before install.sh finishes.
+  assert.doesNotMatch(main, /echo GROKROUTER_\$\{installAttempt\}_INSTALL_FAILED/);
   assert.match(main, /Copy safe diagnostics/);
   assert.match(main, /typeRemoteCommand\("clear"/);
 });

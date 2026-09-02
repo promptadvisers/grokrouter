@@ -9,6 +9,7 @@ Installs on rotating Grok Bot 0.30.0 host builds without a per-hash approval.
 - The Mac and Windows installers read the Bot terminal through screenshot OCR. Attempt IDs now use only OCR-safe characters (no 0/O, 1/I, 5/S, 8/B, 7/T, 2/Z, 6/G), the failure marker matches on its stable prefix, and common digit/letter confusions are folded before comparison. Real beta.44 reports showed hex IDs like `7E0DBDB8` coming back as `TEODBDB8`, which hid the actual failed phase behind a generic "terminal stopped" message.
 - The completion timeout is now measured from the last observed phase instead of the start, so a slow first-time Codex dependency download no longer times out while it is still making progress.
 - The adapter-phase failure text tells users who previously installed OpenGrok or another router to run Restore Stock Grok Bot first.
+- The failure marker in the typed install command is now base64-encoded like the success marker. Public issue #7 showed the OCR loop reading `INSTALL_FAILED` from the still-visible command line and reporting "The Bot computer stopped before installation completed" while install.sh was still running and later succeeded.
 
 # GrokRouter 0.1.0-beta.45
 
