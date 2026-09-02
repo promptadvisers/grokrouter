@@ -85,6 +85,11 @@ grep -q 'only completion authority' "$PROJECT_ROOT/installer/GrokBotRouterInstal
 ! grep -q 'GROKBOT_ROUTER_COMMAND_ACCEPTED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'installPayload.*base64EncodedString' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'installAttempt: installAttempt' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'let failurePayload = Data' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -Fq 'printf %s \(failurePayload) | base64 -d; echo $code' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+# The typed command must never contain a plain-text sentinel: OCR reads the
+# echoed command line and would report a failure before install.sh finishes.
+! grep -q 'echo GROKROUTER_\\(installAttempt)_INSTALL_FAILED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'INSTALLFAILED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Copy safe diagnostics' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'complete host fingerprint is included' "$PROJECT_ROOT/remote/install.sh"

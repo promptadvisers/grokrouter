@@ -678,6 +678,10 @@ async function installRouter(executable, rawOptions) {
     const digest = crypto.createHash("sha256").update(archive).digest("hex");
     const installAttempt = makeInstallAttemptID();
     const installPayload = Buffer.from("\nGROKBOT_ROUTER_INSTALL_OK\n\nGROKBOT_ROUTER_INSTALL_OK\n").toString("base64");
+    // The typed command stays visible in the Bot terminal until output scrolls
+    // it away, and the OCR loop reads that text too. Keep every sentinel
+    // base64-encoded so the failure marker only appears when printed.
+    const failurePayload = Buffer.from(`\nGROKROUTER_${installAttempt}_INSTALL_FAILED_UNKNOWN_CODE_`, "utf8").toString("base64");
     const chunks = [];
     for (let index = 0; index < encoded.length; index += 1_000) chunks.push(encoded.slice(index, index + 1_000));
     const commands = ["mkdir -p /tmp/grokbot-router-installer", ": > /tmp/grokbot-router-installer/payload.b64"];
@@ -688,7 +692,7 @@ async function installRouter(executable, rawOptions) {
       "rm -rf /tmp/grokbot-router-installer/payload",
       "mkdir -p /tmp/grokbot-router-installer/payload",
       "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-      `if ROUTER_INSTALL_ATTEMPT=${installAttempt} bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel}; then clear; printf %s ${installPayload} | base64 -d; else code=$?; echo GROKROUTER_${installAttempt}_INSTALL_FAILED_UNKNOWN_CODE_$code; fi`,
+      `if ROUTER_INSTALL_ATTEMPT=${installAttempt} bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel}; then clear; printf %s ${installPayload} | base64 -d; else code=$?; printf %s ${failurePayload} | base64 -d; echo $code; fi`,
     );
     log("Transferring a SHA-256-verified payload into the Bot computer…");
     const installVNC = await typeRemoteCommandsResilient(commands, client, pageSession);
