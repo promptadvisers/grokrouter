@@ -1,0 +1,55 @@
+name: Tag source release
+
+# Creates the annotated source tag that the README's pinned Terminal command
+# downloads. Run it from the Actions tab after the version bump has merged.
+# It refuses to tag a commit whose version fields disagree with the request.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version exactly as in package.json (for example 0.1.0-beta.46)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Verify the checked-out commit is the requested release
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REQUESTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "Version '$REQUESTED' is not a valid release version" >&2
+            exit 1
+          fi
+          for file in package.json runtime/package.json installer-windows/package.json; do
+            actual="$(node -p "require('./$file').version")"
+            if [[ "$actual" != "$REQUESTED" ]]; then
+              echo "$file is $actual but $REQUESTED was requested" >&2
+              exit 1
+            fi
+          done
+          grep -Fq "SOURCE_REF=\"source-v$REQUESTED\"" scripts/install-macos.sh
+          grep -Fq "source-v$REQUESTED/scripts/install-macos.sh" README.md
+          if git ls-remote --exit-code --tags origin "source-v$REQUESTED" >/dev/null 2>&1; then
+            echo "Tag source-v$REQUESTED already exists; nothing to do" >&2
+            exit 1
+          fi
+      - name: Create and push the annotated source tag
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "source-v$REQUESTED" -m "GrokRouter source v$REQUESTED"
+          git push origin "source-v$REQUESTED"
+          echo "Tagged $(git rev-parse HEAD) as source-v$REQUESTED"
