@@ -1,8 +1,10 @@
 name: Tag source release
 
 # Creates the annotated source tag that the README's pinned Terminal command
-# downloads. Run it from the Actions tab after the version bump has merged.
-# It refuses to tag a commit whose version fields disagree with the request.
+# downloads. Run it from the Actions tab after the version bump has merged,
+# or opt in from a release commit by putting [tag-release] in the message of
+# the commit that lands on main. It refuses to tag a commit whose version
+# fields disagree with the requested version.
 on:
   workflow_dispatch:
     inputs:
@@ -10,20 +12,33 @@ on:
         description: "Release version exactly as in package.json (for example 0.1.0-beta.46)"
         required: true
         type: string
+  push:
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
   tag:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[tag-release]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Verify the checked-out commit is the requested release
+      - name: Resolve the requested version
         env:
-          REQUESTED: ${{ inputs.version }}
+          DISPATCHED: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$DISPATCHED" ]]; then
+            requested="$DISPATCHED"
+          else
+            requested="$(node -p "require('./package.json').version")"
+          fi
+          echo "REQUESTED=$requested" >> "$GITHUB_ENV"
+          echo "Requested source tag: source-v$requested"
+      - name: Verify the checked-out commit is the requested release
         run: |
           set -euo pipefail
           if [[ ! "$REQUESTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
@@ -44,8 +59,6 @@ jobs:
             exit 1
           fi
       - name: Create and push the annotated source tag
-        env:
-          REQUESTED: ${{ inputs.version }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
