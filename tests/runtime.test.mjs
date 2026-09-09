@@ -382,6 +382,52 @@ test("converts Grok tool calls, tool results, and images for OpenRouter", async 
   ]);
 });
 
+test("native child completion requires its exact hidden envelope and durable host request ID", async () => {
+  const text = '[SAND_HIDDEN_PROMPT][A background task just completed] A background task you started has finished.\n\nBackground task "Calculate 9 times 9" (executor) finished:\n81';
+  const completion = {role: "user", content: [{type: "text", text}], providerOptions: {cursor: {requestId: "child-run-81"}}};
+  assert.equal(automationCompletionId(completion), "grok-child-request:child-run-81");
+  assert.equal(automationCompletionId({message: completion}), "grok-child-request:child-run-81");
+  assert.equal(automationCompletionId({data: completion}), "grok-child-request:child-run-81");
+  assert.equal(automationCompletionId({...completion, providerOptions: {}}), "");
+  assert.equal(automationCompletionId({...completion, role: "assistant"}), "");
+  for (const content of ["[SAND_HIDDEN_PROMPT] Keep working", text.replace("[SAND_HIDDEN_PROMPT]", ""), `Please quote ${text}`, `<user_query>${text}</user_query>`]) {
+    assert.equal(automationCompletionId({...completion, content}), "");
+  }
+  assert.deepEqual(await openRouterMessages([completion]), [{role: "user", content: text.replace("[SAND_HIDDEN_PROMPT]", "")}]);
+});
+
+test("native child request IDs revive once and distinguish identical returned results", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-native-child-"));
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  const config = {provider: "openrouter", providers: ["openrouter"], openRouterModel: "openai/test-model", statePath: join(root, "states.json"), auditPath: join(root, "audit.jsonl")};
+  const launch = {role: "assistant", content: [{type: "tool-call", toolCallId: "grokbot-router-send-waiting", toolName: "SendToUser", args: {type: "text", content: "Waiting for the child."}}]};
+  const base = [user("Delegate and return the child result"), launch];
+  const completion = (requestId) => ({role: "user", content: '[SAND_HIDDEN_PROMPT][A background task just completed] A background task you started has finished.\n\nBackground task "Calculate 9 times 9" (executor) finished:\n81', providerOptions: {cursor: {requestId}}});
+  let requests = 0;
+  const fetchImpl = async () => {
+    requests += 1;
+    return new Response(JSON.stringify({model: "openai/test-model", choices: [{message: {content: "CHILD_RETURN_OK 81", tool_calls: []}}]}), {status: 200});
+  };
+  const execute = (messages) => runTurn({config, messages, sessionOptions: {botId: "native-parent"}}, {fetchImpl});
+  try {
+    const first = [...base, completion("child-request-1")];
+    assert.equal(hasDeliveryAfterLatestQuery(first), false);
+    assert.equal((await execute(first)).text, "CHILD_RETURN_OK 81");
+    assert.equal((await execute(first)).alreadyDelivered, true);
+    const next = [...first, completion("child-request-2")];
+    assert.equal((await execute(next)).text, "CHILD_RETURN_OK 81");
+    assert.equal((await execute(next)).alreadyDelivered, true);
+    assert.equal(requests, 2);
+    const audit = (await readFile(config.auditPath, "utf8")).trim().split("\n").map(JSON.parse);
+    assert.ok(audit.some((row) => row.event === "turn_suppressed" && row.reason));
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+    await rm(root, {recursive: true, force: true});
+  }
+});
+
 test("a subagent completion supersedes the earlier launch delivery", () => {
   const completion = {
     role: "user",

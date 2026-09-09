@@ -14,6 +14,7 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 - Brokered `SendMessage` results count as delivered answers. Historical dynamic-tool calls cannot fabricate a background-task acknowledgement.
 - Native child sessions finish through the host response stream, preserving their final text for the parent. Parent replies retain the canonical delivery handler even when inference schemas omit it.
 - Failed delivery receipts cannot suppress the unfinished answer. Recovery is scoped to durable failure IDs, including failures while returning a completed child's result.
+- Native child wake-up messages use their durable host request IDs for completion recovery; automation inbox messages retain their explicit completion IDs. Identical result text does not merge distinct completion requests.
 - Codex receives one recovery attempt for an empty response on the same thread. A tagged completed-child result remains available as the fallback if both responses are empty, with a redacted recovery receipt.
 - The management Doctor returns success only when its runtime syntax and host-adapter checks pass. In-chat and desktop health checks now have separately documented scopes.
 - Native workflow registration has an operation-specific diagnostic deadline long enough for the host library's readiness wait and bounded retries; ordinary transport calls keep their shorter deadlines.

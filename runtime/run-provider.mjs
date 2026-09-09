@@ -52,6 +52,18 @@ export function automationCompletionId(message) {
     const id = cursor?.sandAutomationCompletionId;
     if (typeof id === "string" && id.trim()) return id.trim();
   }
+  // Native child revival uses runner.run(hidden: true), separately from the
+  // automation inbox. The reviewed host preserves that run's requestId on the
+  // user message. Match its exact envelope and deduplicate by that durable ID;
+  // equal child output from another request remains a distinct completion.
+  const content = message?.content ?? message?.message?.content ?? message?.data?.content;
+  if (messageRole(message) === "user"
+    && /^\s*\[SAND_HIDDEN_PROMPT\]\s*\[A background task just completed\](?:\s|$)/.test(collectText(content))) {
+    for (const cursor of candidates) {
+      const id = cursor?.requestId;
+      if (typeof id === "string" && id.trim()) return `grok-child-request:${id.trim()}`;
+    }
+  }
   return "";
 }
 
