@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -105,7 +106,7 @@ class RouterPatchTests(unittest.TestCase):
         self.assertNotIn("grokbot router delivery complete", self.host.read_text())
         self.assertNotIn("new SandRunAbortError", self.host.read_text())
         self.assertIn('for (const name of ["SendToUser", "SendMessage", "SendUser"])', self.host.read_text())
-        self.assertIn('return "SendToUser";', self.host.read_text())
+        self.assertNotIn('return "SendToUser";', self.host.read_text())
         self.assertIn('{ botId: typeof boxId === "string"', self.host.read_text())
         self.assertEqual(self.host.read_text().count('{ botId: typeof boxId === "string"'), 1)
         self.assertIn('grokBotRouterControlText: rawTranscriptText', self.host.read_text())
@@ -123,6 +124,53 @@ class RouterPatchTests(unittest.TestCase):
         )
         self.assertEqual(restored["status"], "restored")
         self.assertEqual(self.host.read_text(), STOCK_SOURCE)
+
+    def test_executor_finishes_children_without_inventing_a_delivery_tool(self):
+        # Exercise the injected executor protocol against a minimal host double.
+        # Child sessions offer execution tools, but no user-delivery tool.
+        script = r'''const assert = require("node:assert/strict");
+class MockPromptExecutor {
+  constructor(factory, messages = []) {
+    this.factory = factory;
+    this.builder = { getMessages: () => messages };
+  }
+  stream() {
+    const value = this.factory();
+    return { response: Promise.resolve(value), fullStream: (async function* () {})() };
+  }
+}
+''' + router_patch.EXECUTOR_CODE + r'''
+(async () => {
+  let nextResult = { text: "56", toolCalls: [], usage: {} };
+  runGrokBotRouter = async () => nextResult;
+  const execute = async (tools) => {
+    const executor = new GrokBotRouterPromptExecutor({}, {isSubagent:true}, []);
+    return await executor.stream({}, "probe", tools, {}).response;
+  };
+  const child = await execute([{name:"Shell"}, {name:"Read"}]);
+  assert.equal(child.response, "56");
+  assert.deepEqual(child.toolCalls, []);
+  const emptySchema = await execute([]);
+  assert.equal(emptySchema.response, "56");
+  assert.deepEqual(emptySchema.toolCalls, []);
+  const parent = await execute([{name:"SendMessage"}, {name:"SendToUser"}]);
+  assert.equal(parent.response, "");
+  assert.equal(parent.toolCalls.length, 1);
+  assert.equal(parent.toolCalls[0].toolName, "SendToUser");
+  assert.match(parent.toolCalls[0].toolCallId, /^grokbot-router-send-/);
+  assert.equal(parent.toolCalls[0].args.content, "56");
+  nextResult = {text:"Working",toolCalls:[{toolName:"Shell",toolCallId:"actual-call",args:{command:"true"}}]};
+  const toolTurn = await execute([{name:"Shell"}]);
+  assert.equal(toolTurn.response, "");
+  assert.deepEqual(toolTurn.toolCalls, nextResult.toolCalls);
+  nextResult = {text:"",toolCalls:[],alreadyDelivered:true};
+  const cleanup = await execute([{name:"SendToUser"}]);
+  assert.equal(cleanup.response, "");
+  assert.deepEqual(cleanup.toolCalls, []);
+})().catch(error => { console.error(error); process.exitCode = 1; });
+'''
+        result = subprocess.run(["node", "-"], input=script, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_unknown_host_is_rejected_without_development_override(self):
         self.host.write_text(STOCK_SOURCE + "// changed\n")

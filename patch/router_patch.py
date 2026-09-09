@@ -93,7 +93,9 @@ function getGrokBotRouterSendToolName(tools) {
   for (const name of ["SendToUser", "SendMessage", "SendUser"]) {
     if (names.includes(name)) return name;
   }
-  return "SendToUser";
+  // Child sessions can finish through the response stream without exposing a
+  // user-delivery tool. Inventing one discards their finalAssistantText.
+  return null;
 }
 function getGrokBotRouterChildEnv() {
   const names = [
@@ -220,16 +222,17 @@ var GrokBotRouterPromptExecutor = class extends MockPromptExecutor {
         }), messages);
         return delegate.stream(ctx, invocationId, tools, options);
       }
-      const fallbackToolCalls = providerToolCalls.length > 0 ? [] : [{
+      const sendToolName = getGrokBotRouterSendToolName(tools);
+      const fallbackToolCalls = providerToolCalls.length > 0 || !sendToolName ? [] : [{
         toolCallId: `grokbot-router-send-${require("node:crypto").randomUUID()}`,
-        toolName: getGrokBotRouterSendToolName(tools),
+        toolName: sendToolName,
         args: { type: "text", content: result.text }
       }];
       const delegate = new MockPromptExecutor(() => ({
         // A response chunk and a tool call in the same mock turn can cause Grok
         // to deliver the text and skip execution. Tool turns stay silent until
         // Grok returns the tool result and the provider produces final text.
-        response: "",
+        response: providerToolCalls.length > 0 || sendToolName ? "" : result.text,
         toolCalls: providerToolCalls.length > 0 ? providerToolCalls : fallbackToolCalls,
         chunkSize: 256,
         streamDelay: 0,
