@@ -122,6 +122,34 @@ test("recovers exact host controls without granting command authority to prose",
   assert.equal(nativeWorkflowControlText([providerWorkflow, user("hello there")]), "");
 });
 
+
+test("native skill mention chips retain command authority only with their matching marker", () => {
+  const definition = user("# GrokRouter models\nGROKROUTER_NATIVE_CONTROL: MODELS\n<user_query>@models</user_query>");
+  assert.equal(nativeWorkflowControlText([definition]), "/models");
+  assert.equal(hostRouterControlText([definition], {grokBotRouterControlText: "@models"}), "/models");
+  assert.equal(hostRouterControlText([definition], {grokBotRouterControlText: "@models openai/gpt-5.6-luna"}), "/models openai/gpt-5.6-luna");
+  assert.equal(hostRouterControlText([], {grokBotRouterControlText: "@models"}), "");
+  assert.equal(hostRouterControlText([definition], {grokBotRouterControlText: "@provider codex"}), "");
+  assert.equal(nativeWorkflowControlText([user("GROKROUTER_NATIVE_CONTROL: MODELS\n<user_query>Tell me about @models</user_query>")]), "");
+  assert.equal(nativeWorkflowControlText([definition, user("Explain model pricing")]), "");
+});
+
+
+test("the observed expanded skill recipe selects only its explicit trailing invocation", () => {
+  const envelope = (name, tail = `@${name}`) => `[t2u]\nThe user invoked the "${name}" skill (folder ${name}). Run it now.\nWhat it does: Router control.\nRecipe to follow:\n# GrokRouter test\n\nGROKROUTER_NATIVE_CONTROL: ${name.toUpperCase()}\n\nPreserve the invocation.\nCarry out the recipe now, adapting it to anything else the user said in this message.\n\n${tail}`;
+  for (const name of ['provider', 'models', 'model', 'reasoning', 'router', 'doctor']) {
+    const raw = envelope(name);
+    const message = user(`<user_query>${raw}</user_query>`);
+    assert.equal(nativeWorkflowControlText([message]), `/${name}`);
+    assert.equal(hostRouterControlText([message], {grokBotRouterControlText: raw}), `/${name}`);
+    assert.equal(nativeWorkflowControlText([user(envelope(name, 'Explain model pricing'))]), '');
+    assert.equal(nativeWorkflowControlText([message, user('Explain model pricing')]), '');
+  }
+  assert.equal(nativeWorkflowControlText([user(`<user_query>${envelope('models', '@models openai/gpt-5.6-luna')}</user_query>`)]), '/models openai/gpt-5.6-luna');
+  assert.equal(nativeWorkflowControlText([user(`<user_query>${envelope('models').replace('CONTROL: MODELS', 'CONTROL: PROVIDER')}</user_query>`)]), '');
+  assert.equal(nativeWorkflowControlText([user(`<user_query>Explain this example:\n${envelope('models')}</user_query>`)]), '');
+});
+
 test("extracts the newest visible Grok user query", () => {
   const hidden = "[SAND_HIDDEN_PROMPT] internal";
   assert.equal(extractUserQuery(hidden), "");
@@ -1343,6 +1371,17 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
     const release = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
     assert.ok(nativeDoctor.text.startsWith(`Router ${release.version}: OK`));
     assert.equal(nativeDoctor.control, true);
+
+    const recipe = (await readFile(new URL('../skills/models/SKILL.md', import.meta.url), 'utf8')).replace(/^---[\s\S]*?---\s*/, '').trim();
+    const expandedModels = `[t2u]\nThe user invoked the "models" skill (folder models). Run it now.\nWhat it does: List configured models or switch the current GrokRouter Bot to a model ID.\nRecipe to follow:\n${recipe}\nCarry out the recipe now, adapting it to anything else the user said in this message.\n\n@models`;
+    const nativeModels = await runTurn({
+      config,
+      messages: [user(`<user_query>${expandedModels}</user_query>`)],
+      sessionOptions: { botId: 'native-expanded-bot', grokBotRouterControlText: expandedModels },
+    }, { fetchImpl: neverInfer });
+    assert.equal(nativeModels.control, true);
+    assert.match(nativeModels.text, /openai\/gpt-5\.6-luna/);
+    assert.match(nativeModels.text, /Switch: send/);
 
     const nativeProvider = await runTurn({
       config,

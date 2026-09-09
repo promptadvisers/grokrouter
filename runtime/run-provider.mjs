@@ -238,11 +238,30 @@ function controlProbe(messages) {
 
 const NATIVE_WORKFLOW_COMMAND_MARKER = /GROKROUTER_NATIVE_(?:COMMAND:\s*\/|CONTROL:\s*)(providers?|models?|reasoning|router|doctor)(?:\s|$)/ig;
 
+function expandedNativeSkillControlText(raw) {
+  // A menu selection is expanded by the verified desktop into a recipe plus
+  // its trailing mention. Match this complete wrapper, never a retained recipe
+  // elsewhere in the transcript or a command mentioned in ordinary prose.
+  const visible = extractUserQuery(raw).trim().replace(/^\[[^\]\n]+\]\s*/, "");
+  const wrapper = visible.match(/^The user invoked the "(providers?|models?|reasoning|router|doctor)" skill \(folder \1\)\. Run it now\.\r?\nWhat it does: [^\n]*\r?\nRecipe to follow:\r?\n([\s\S]+)\r?\nCarry out the recipe now, adapting it to anything else the user said in this message\.\s*\r?\n([\s\S]+)$/i);
+  if (!wrapper) return "";
+  const name = wrapper[1].toLowerCase();
+  const recipe = wrapper[2];
+  if (!/^# GrokRouter\b/m.test(recipe)) return "";
+  const markers = [...recipe.matchAll(NATIVE_WORKFLOW_COMMAND_MARKER)];
+  if (markers.length !== 1 || markers[0][1].toLowerCase() !== name) return "";
+  const invocation = wrapper[3].trim().match(new RegExp(`^[/@]?${name}(?:\\s+([^\\n]+))?$`, "i"));
+  if (!invocation) return "";
+  return `/${name}${invocation[1] ? ` ${invocation[1].trim()}` : ""}`;
+}
+
 export function hostRouterControlText(messages, sessionOptions = {}) {
   const raw = typeof sessionOptions.grokBotRouterControlText === "string"
     ? sessionOptions.grokBotRouterControlText
     : "";
   if (!raw.trim()) return "";
+  const expanded = expandedNativeSkillControlText(raw);
+  if (expanded) return expanded;
   const visible = extractUserQuery(raw).trim();
   if (!visible) return "";
   const addressed = addressedRouterControlText(visible);
@@ -252,7 +271,7 @@ export function hostRouterControlText(messages, sessionOptions = {}) {
   // transcript even though the composer visibly rendered `/provider codex`.
   // Accept that slashless form only when the matching registered workflow
   // marker is present. Ordinary prose never gains command authority here.
-  const bare = visible.match(/^(providers?|models?|reasoning|router|doctor)(?:\s+([\s\S]+))?$/i);
+  const bare = visible.match(/^@?(providers?|models?|reasoning|router|doctor)(?:\s+([\s\S]+))?$/i);
   if (!bare) return "";
   const commandName = bare[1].toLowerCase();
   const hasMatchingMarker = (Array.isArray(messages) ? messages : []).some((message) => {
@@ -269,6 +288,8 @@ export function nativeWorkflowControlText(messages) {
   for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
     const message = messages[index];
     const raw = collectText(message?.content ?? message);
+    const expanded = expandedNativeSkillControlText(raw);
+    if (expanded) return expanded;
     const markers = [...raw.matchAll(NATIVE_WORKFLOW_COMMAND_MARKER)];
     if (markers.length === 0) {
       const role = messageRole(message);
@@ -278,10 +299,11 @@ export function nativeWorkflowControlText(messages) {
     const base = `/${markers[markers.length - 1][1].toLowerCase()}`;
     const commandName = base.slice(1);
     const visible = extractUserQuery(raw).trim();
-    const selected = visible.match(new RegExp(`^/?${commandName}(?:\\s+([\\s\\S]+))?$`, "i"));
+    const selected = visible.match(new RegExp(`^[/@]?${commandName}(?:\\s+([\\s\\S]+))?$`, "i"));
     if (!selected) {
       // A retained definition does not authorize a different visible request.
       if (visible && visible !== raw.trim()) return "";
+      if (!/^# GrokRouter\b/.test(raw.trim())) return "";
       return base;
     }
     const argument = String(selected[1] || "").trim();

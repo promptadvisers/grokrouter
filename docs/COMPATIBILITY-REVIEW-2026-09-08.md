@@ -23,3 +23,8 @@ The official current download endpoint also offered desktop 0.44.0 during this i
 ## Packaging correction
 
 Windows package.json pins Electron 41.10.3, but the previous packaging script explicitly selected 40.10.6. The script now reads the pinned dependency version from its staged package.json, keeping the packaged runtime aligned with the lockfile.
+The native Models menu entry reached inference and generated an incorrect single-model catalog in the first new 0.36 Bot. Its typed /models command returned all six configured models immediately.
+
+The own test Bot transcript shows that Grok expands a selected native skill into a complete invocation wrapper with its folder, recipe, and trailing @models mention. The candidate had mistaken the wrapper's explicit invocation for unrelated visible prose. The repair recognizes the complete observed wrapper and its matching GrokRouter marker. Unrelated prose, mismatched names, and retained definitions remain rejected.
+
+Unit and integration tests assert this path returns a deterministic control receipt and never calls provider inference. Live retesting on a rebuilt artifact is in progress. No capability or release gate is marked passed yet.
