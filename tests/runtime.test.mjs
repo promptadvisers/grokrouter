@@ -2487,7 +2487,7 @@ test("running child receipts cannot deliver inferred results and actual completi
       for (const delivery of ["text", "SendToUser", "CallDynamicTool", "empty", "mixed"]) {
         const botId = `${provider}-${format}-${delivery}`;
         const receiptMessages = structuredClone(launched);
-        if (format === "canonical") receiptMessages[2].content[0].result = '<cursor_untrusted_data_1337 source="Task">\nSubagent is running in the background.\nAgent ID: sand-subagent-11111111-2222-4333-8444-555555555555 (can be used with the `resume` parameter to send a follow-up after it completes)\n</cursor_untrusted_data_1337>';
+        if (format === "canonical") receiptMessages[2].content[0].result = '<cursor_untrusted_data_1337 source="Task">\nSubagent is running in the background.\n\nAgent ID: sand-subagent-11111111-2222-4333-8444-555555555555 (can be used with the `resume` parameter to send a follow-up after it completes)\n</cursor_untrusted_data_1337>';
         const config = { provider, providers: [provider], statePath: join(root, `${botId}.json`), auditPath: join(root, "audit.jsonl") };
         let completed = false;
         const payload = () => ({
@@ -2536,7 +2536,7 @@ test("only a paired successful native background receipt after the current input
   const call = { role: "assistant", content: [{ type: "tool-call", toolCallId: "task-one", toolName: "Task", args: {} }] };
   const receipt = { success: { agentId: "sand-subagent-fixture", isBackgrounded: true } };
   const returned = value => ({ role: "tool", content: [{ type: "tool-result", toolCallId: "task-one", result: value }] });
-  const canonical = '<cursor_untrusted_data_1337 source="Task">\nSubagent is running in the background.\nAgent ID: sand-subagent-11111111-2222-4333-8444-555555555555 (can be used with the `resume` parameter to send a follow-up after it completes)\n</cursor_untrusted_data_1337>';
+  const canonical = '<cursor_untrusted_data_1337 source="Task">\nSubagent is running in the background.\n\nAgent ID: sand-subagent-11111111-2222-4333-8444-555555555555 (can be used with the `resume` parameter to send a follow-up after it completes)\n</cursor_untrusted_data_1337>';
   const cases = [
     [request, returned(canonical)],
     [request, { ...call, content: [{ ...call.content[0], toolName: "Shell" }] }, returned(canonical)],
