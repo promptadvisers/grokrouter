@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { createPublicKey, verify } from "node:crypto";
 
-const [registryPath, signaturePath, publicKeyPath] = process.argv.slice(2);
+const [registryPath, signaturePath, publicKeyPath, expectedVersion = "0.30.0"] = process.argv.slice(2);
 if (!registryPath || !signaturePath || !publicKeyPath) {
   throw new Error("Usage: verify-host-registry.mjs REGISTRY SIGNATURE PUBLIC_KEY");
 }
@@ -24,7 +24,7 @@ if (!verify(null, registryBytes, publicKey, signature)) {
   throw new Error("Host registry signature verification failed");
 }
 const registry = JSON.parse(registryBytes.toString("utf8"));
-if (registry.schemaVersion !== 1 || registry.grokBotVersion !== "0.30.0") {
+if (registry.schemaVersion !== 1 || registry.grokBotVersion !== expectedVersion) {
   throw new Error("Host registry targets an unsupported schema or Grok Bot version");
 }
 if (!Array.isArray(registry.stockHosts) || registry.stockHosts.length === 0) {

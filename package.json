@@ -13,7 +13,7 @@
     "build:macos": "bash scripts/build-macos-app.sh",
     "build:windows": "bash scripts/build-windows-app.sh",
     "build": "npm run test && npm run build:macos",
-    "test:release": "node --test tests/release.test.mjs"
+    "test:release": "node --test tests/release.test.mjs tests/compatibility.test.mjs"
   },
   "engines": {
     "node": ">=18"

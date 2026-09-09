@@ -9,7 +9,9 @@ const WebSocket = require("ws");
 const { createWorker } = require("tesseract.js");
 
 const execFileAsync = promisify(execFile);
-const SUPPORTED_GROK_VERSION = "0.30.0";
+const SUPPORTED_GROK_VERSIONS = ["0.30.0", "0.36.0"];
+const SUPPORTED_GROK_VERSION = SUPPORTED_GROK_VERSIONS.join(", ");
+let detectedGrokVersion = "0.30.0";
 const CDP_PORT = 19222;
 const CODEX_MODELS = new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]);
 const OPENROUTER_MODELS = new Set([
@@ -253,9 +255,11 @@ async function locateAndValidateGrok() {
   }
   if (metadata.Status !== "Valid") throw new Error("The installed Grok Bot executable does not have a valid Windows signature. Nothing was changed.");
   const version = String(metadata.Version || "").trim();
-  if (version !== SUPPORTED_GROK_VERSION && version !== `${SUPPORTED_GROK_VERSION}.0`) {
+  const matched = SUPPORTED_GROK_VERSIONS.find((supported) => version === supported || version === `${supported}.0`);
+  if (!matched) {
     throw new Error(`Grok Bot ${version || "unknown"} is not supported. This beta is pinned to ${SUPPORTED_GROK_VERSION} and will not patch an unknown build.`);
   }
+  detectedGrokVersion = matched;
   return executable;
 }
 
@@ -283,7 +287,7 @@ async function browserWebSocketURL() {
 }
 
 async function relaunchWithDiagnostics(executable) {
-  log(`Verified signed Grok Bot ${SUPPORTED_GROK_VERSION}. Restarting with a local diagnostic port…`);
+  log(`Verified signed Grok Bot ${detectedGrokVersion}. Restarting with a local diagnostic port…`);
   await stopGrok();
   if (await browserWebSocketURL().then(() => true).catch(() => false)) {
     throw new Error(`Local port ${CDP_PORT} is already in use. Close the application using it and retry.`);
@@ -656,7 +660,7 @@ function validatedInstallOptions(raw) {
 
 async function installRouter(executable, rawOptions) {
   const options = validatedInstallOptions(rawOptions);
-  setStatus(true, `Step 1 of 6 · Grok Bot ${SUPPORTED_GROK_VERSION} is supported.`);
+  setStatus(true, `Step 1 of 6 · Grok Bot ${detectedGrokVersion} is supported.`);
   await relaunchWithDiagnostics(executable);
   const client = new CDPClient(await browserWebSocketURL());
   try {
@@ -692,7 +696,7 @@ async function installRouter(executable, rawOptions) {
       "rm -rf /tmp/grokbot-router-installer/payload",
       "mkdir -p /tmp/grokbot-router-installer/payload",
       "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-      `if ROUTER_INSTALL_ATTEMPT=${installAttempt} bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel}; then clear; printf %s ${installPayload} | base64 -d; else code=$?; printf %s ${failurePayload} | base64 -d; echo $code; fi`,
+      `if ROUTER_INSTALL_ATTEMPT=${installAttempt} bash /tmp/grokbot-router-installer/payload/remote/install.sh --grok-version ${detectedGrokVersion} --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel}; then clear; printf %s ${installPayload} | base64 -d; else code=$?; printf %s ${failurePayload} | base64 -d; echo $code; fi`,
     );
     log("Transferring a SHA-256-verified payload into the Bot computer…");
     const installVNC = await typeRemoteCommandsResilient(commands, client, pageSession);

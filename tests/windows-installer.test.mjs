@@ -19,7 +19,7 @@ test("Windows installer version matches the shared release version", () => {
 });
 
 test("Windows installer keeps the exact compatibility and local-only gates", () => {
-  assert.match(main, /SUPPORTED_GROK_VERSION = "0\.30\.0"/);
+  assert.match(main, /SUPPORTED_GROK_VERSIONS = \["0\.30\.0", "0\.36\.0"\]/);
   assert.match(main, /metadata\.Status !== "Valid"/);
   assert.match(main, /127\.0\.0\.1:\$\{CDP_PORT\}/);
   assert.match(main, /--remote-debugging-address=127\.0\.0\.1/);
@@ -96,7 +96,7 @@ test("Windows renderer is isolated from Node and never stores the OpenRouter key
   assert.match(html, /connect-src 'none'/);
   assert.match(html, /Bring your own model\./);
   assert.doesNotMatch(html, /Bring your own brain\./);
-  assert.match(html, /GROK BOT 0\.30\.0/);
+  assert.match(html, /GROK BOT 0\.30 \/ 0\.36/);
   assert.doesNotMatch(html, /PRIVATE BETA/);
 });
 

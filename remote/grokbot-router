@@ -13,12 +13,13 @@ INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_PATH="$INSTALL_ROOT/provider.json"
 PATCHER="$INSTALL_ROOT/patch/router_patch.py"
 HOST_REGISTRY_TOOL="$INSTALL_ROOT/bin/host-registry"
+GROK_VERSION="$("$HOST_REGISTRY_TOOL" version)"
 CODEX_CLI="$INSTALL_ROOT/node_modules/.bin/codex"
 GROK_SKILLS_ROOT="${ROUTER_GROK_SKILLS_ROOT:-/home/box/.grok/skills}"
 PATCH_ARGS=(
   --host "${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
   --backup "${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
-  --manifest "${ROUTER_PATCH_MANIFEST:-$INSTALL_ROOT/patch/manifests/0.30.0.json}"
+  --manifest "${ROUTER_PATCH_MANIFEST:-$INSTALL_ROOT/patch/manifests/$GROK_VERSION.json}"
 )
 if [[ "${ROUTER_ALLOW_UNKNOWN_HOST:-0}" == "1" ]]; then
   PATCH_ARGS+=(--allow-unknown-host)

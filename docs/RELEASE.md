@@ -56,3 +56,5 @@ For a registry update:
 6. Commit the registry and signature together. Existing clients verify the signature against the bundled public key.
 
 Changing anchors, the transformation, supported desktop versions, or the signing key requires a new installer and complete acceptance, not merely a registry update.
+
+Every release gate must contain separate dated evidence under `versions` for each exact version in `compatibility/supported-apps.json`. A successful test on one desktop version cannot authorize another. Keep signatures and host manifests separated by desktop version.

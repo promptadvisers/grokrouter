@@ -26,10 +26,14 @@ test('release validation rejects disagreeing package and lockfile versions', asy
 
 test('a green build cannot substitute for live acceptance or a different candidate', () => {
   const names = ['mac-install-restore-reinstall', 'fresh-bot-controls', 'two-bot-isolation', 'channel-controls', 'codex-capabilities', 'openrouter-capabilities', 'clean-source-install'];
-  const record = { version: '1.0.0', sourceDigest: 'abc', status: 'passed', supportedGrokVersions: ['test'], gates: Object.fromEntries(names.map(name => [name, {status: 'passed', evidence: 'test receipt', testedAt: '2026-09-08'}])) };
-  assert.doesNotThrow(() => validateAcceptance(record, '1.0.0', 'abc'));
-  assert.throws(() => validateAcceptance(record, '1.0.0', 'changed'), /candidate source/);
-  assert.throws(() => validateAcceptance({...record, status: 'pending'}, '1.0.0', 'abc'), /pending/);
+  const record = { version: '1.0.0', sourceDigest: 'abc', status: 'passed', supportedGrokVersions: ['test'], gates: Object.fromEntries(names.map(name => [name, {status: 'passed', evidence: 'test receipt', testedAt: '2026-09-08', versions: {test: {status: 'passed', evidence: 'test receipt', testedAt: '2026-09-08'}}}])) };
+  assert.doesNotThrow(() => validateAcceptance(record, '1.0.0', 'abc', ['test']));
+  assert.throws(() => validateAcceptance(record, '1.0.0', 'changed', ['test']), /candidate source/);
+  assert.throws(() => validateAcceptance({...record, status: 'pending'}, '1.0.0', 'abc', ['test']), /pending/);
+  assert.throws(() => validateAcceptance(record, '1.0.0', 'abc', ['test', 'new']), /every supported/);
+  const incomplete = structuredClone(record);
+  delete incomplete.gates['fresh-bot-controls'].versions.test;
+  assert.throws(() => validateAcceptance(incomplete, '1.0.0', 'abc', ['test']), /on Grok Bot test/);
   delete record.gates['openrouter-capabilities'];
-  assert.throws(() => validateAcceptance(record, '1.0.0', 'abc'), /openrouter-capabilities/);
+  assert.throws(() => validateAcceptance(record, '1.0.0', 'abc', ['test']), /openrouter-capabilities/);
 });

@@ -3,7 +3,9 @@ import CryptoKit
 import Foundation
 import Vision
 
-private let supportedGrokVersion = "0.30.0"
+private let supportedGrokVersions = ["0.30.0", "0.36.0"]
+private let supportedGrokVersion = supportedGrokVersions.joined(separator: ", ")
+private var detectedGrokVersion = "0.30.0"
 private let grokBundleIdentifier = "com.anysphere.sand"
 private let grokAppPath = "/Applications/Grok Bot.app"
 private let cdpPort = 19222
@@ -221,7 +223,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         iconView.widthAnchor.constraint(equalToConstant: 88).isActive = true
         iconView.heightAnchor.constraint(equalToConstant: 88).isActive = true
 
-        let eyebrow = NSTextField(labelWithString: "GROK BOT 0.30.0")
+        let eyebrow = NSTextField(labelWithString: "GROK BOT 0.30 / 0.36")
         eyebrow.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
         eyebrow.textColor = NSColor(calibratedRed: 1.0, green: 0.48, blue: 0.12, alpha: 1)
         let title = NSTextField(labelWithString: "Bring your own model.")
@@ -366,7 +368,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         logView.textColor = NSColor(calibratedWhite: 0.76, alpha: 1)
         logView.backgroundColor = NSColor(calibratedRed: 0.035, green: 0.038, blue: 0.041, alpha: 1)
         logView.textContainerInset = NSSize(width: 12, height: 10)
-        logView.string = "The installer will verify Grok Bot 0.30.0, create a stock backup, install the pinned runtime, and test the result.\n"
+        logView.string = "The installer will verify the supported Grok Bot version and vendor signature, create a stock backup, install the pinned runtime, and test the result.\n"
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.borderType = .noBorder
@@ -706,13 +708,24 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             throw InstallerError.message("Install the official Grok Bot app in /Applications first.")
         }
         let version = info["CFBundleShortVersionString"] as? String ?? "unknown"
-        guard version == supportedGrokVersion else {
+        guard supportedGrokVersions.contains(version) else {
             throw InstallerError.message("Grok Bot \(version) is not supported. This beta is pinned to \(supportedGrokVersion) and will not patch an unknown build.")
         }
+        let verification = Process()
+        verification.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        verification.arguments = ["--verify", "--deep", "--strict", "-R", "=anchor apple generic and identifier \"com.anysphere.sand\" and certificate leaf[subject.OU] = \"DCNK4UB866\"", grokAppPath]
+        verification.standardOutput = FileHandle.nullDevice
+        verification.standardError = FileHandle.nullDevice
+        try verification.run()
+        verification.waitUntilExit()
+        guard verification.terminationStatus == 0 else {
+            throw InstallerError.message("The installed Grok Bot app does not have the expected valid vendor signature. Nothing was changed.")
+        }
+        detectedGrokVersion = version
     }
 
     private func relaunchGrokWithDiagnostics() async throws {
-        appendLog("Verified Grok Bot \(supportedGrokVersion). Restarting with a local diagnostic port…")
+        appendLog("Verified Grok Bot \(detectedGrokVersion). Restarting with a local diagnostic port…")
         await stopRunningGrok()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
@@ -1361,7 +1374,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         openRouterKey: String
     ) async throws -> String {
         try validateGrokApp()
-        updateStatus("Step 1 of 6 · Grok Bot \(supportedGrokVersion) is supported.")
+        updateStatus("Step 1 of 6 · Grok Bot \(detectedGrokVersion) is supported.")
         try await relaunchGrokWithDiagnostics()
         let client = CDPClient(url: try await browserWebSocketURL())
         let pageSession = try await mainPageSession(client)
@@ -1423,7 +1436,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             "rm -rf /tmp/grokbot-router-installer/payload",
             "mkdir -p /tmp/grokbot-router-installer/payload",
             "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; printf %s \(failurePayload) | base64 -d; echo $code; fi"
+            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --grok-version \(detectedGrokVersion) --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; printf %s \(failurePayload) | base64 -d; echo $code; fi"
         ])
         appendLog("Transferring a SHA-256-verified payload into the Bot computer…")
         let installVNC = try await typeRemoteCommandsResilient(commands, client: client, pageSession: pageSession)

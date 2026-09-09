@@ -71,7 +71,7 @@ rm -rf "$BUILD_ROOT/windows/GrokRouter-win32-$ARCH"
   GrokRouter \
   --platform=win32 \
   --arch="$ARCH" \
-  --electron-version=40.10.6 \
+  --electron-version="$(cd "$STAGE_ROOT" && node -p "require('./package.json').devDependencies.electron")" \
   --app-version="$VERSION" \
   --icon="$STAGE_ROOT/assets/AppIcon.ico" \
   --no-asar \

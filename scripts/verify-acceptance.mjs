@@ -21,13 +21,18 @@ export async function releaseSourceDigest(root) {
   return hash.digest('hex');
 }
 
-export function validateAcceptance(record, version, sourceDigest) {
+export function validateAcceptance(record, version, sourceDigest, expectedVersions) {
   if (record.version !== version || record.sourceDigest !== sourceDigest) throw new Error('Live acceptance does not match the candidate source');
   if (record.status !== 'passed') throw new Error('Live release acceptance is still pending');
+  if (!Array.isArray(expectedVersions) || expectedVersions.length === 0 || JSON.stringify([...record.supportedGrokVersions || []].sort()) !== JSON.stringify([...expectedVersions].sort())) throw new Error('Live evidence must cover every supported Grok Bot version');
   const required = ['mac-install-restore-reinstall', 'fresh-bot-controls', 'two-bot-isolation', 'channel-controls', 'codex-capabilities', 'openrouter-capabilities', 'clean-source-install'];
   for (const name of required) {
     const gate = record.gates?.[name];
-    if (gate?.status !== 'passed' || !gate.evidence || !gate.testedAt) throw new Error(`Missing live evidence: ${name}`);
+    if (gate?.status !== 'passed' || !gate.evidence || !Number.isFinite(Date.parse(gate.testedAt))) throw new Error(`Missing live evidence: ${name}`);
+    for (const grokVersion of expectedVersions) {
+      const proof = gate.versions?.[grokVersion];
+      if (proof?.status !== 'passed' || !proof.evidence || !Number.isFinite(Date.parse(proof.testedAt))) throw new Error(`Missing live evidence: ${name} on Grok Bot ${grokVersion}`);
+    }
   }
   if (!Array.isArray(record.supportedGrokVersions) || record.supportedGrokVersions.length === 0) throw new Error('No verified Grok Bot version recorded');
 }
@@ -40,7 +45,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     else {
       const { version } = await verifyRelease(root);
       const record = JSON.parse(await readFile(join(root, 'docs/release-acceptance.json'), 'utf8'));
-      validateAcceptance(record, version, digest);
+      const { versions } = JSON.parse(await readFile(join(root, 'compatibility/supported-apps.json'), 'utf8'));
+      validateAcceptance(record, version, digest, versions);
       console.log(`Live acceptance verified for ${version} at ${digest}`);
     }
   } catch (error) { console.error(error.message); process.exitCode = 1; }

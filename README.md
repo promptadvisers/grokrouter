@@ -10,14 +10,14 @@ GrokRouter is an experimental, unofficial, reversible model router. Each Bot rem
 
 | Component | Current boundary |
 | --- | --- |
-| Grok Bot desktop | **0.30.0 only** until a newer exact version completes acceptance |
+| Grok Bot desktop | Published beta.46: **0.30.0**. Candidate beta.47: exact **0.30.0 and 0.36.0** gates, with live acceptance still pending |
 | macOS | Apple silicon, macOS 12+, Apple Command Line Tools |
 | Windows x64 / Arm64 | Source preview; CI packaging is separate from native installation verification |
 | Codex SDK | Sign in with your existing Codex account in the Bot computer |
 | OpenRouter | Your OpenRouter API key; provider usage is billed by OpenRouter |
 | Computer and sub-agents | Available only when Grok offers the necessary schemas; see the [verification matrix](docs/TEST-MATRIX.md) for provider-specific evidence |
 
-**Already updated Grok Bot to 0.36.0 or later?** Do not retry installation on that version or edit the version check. Those reports are tracked in [#1](https://github.com/promptadvisers/grokrouter/issues/1) and [#7](https://github.com/promptadvisers/grokrouter/issues/7). A successful source build does not establish compatibility with a newer Grok app or cloud host.
+**Already updated Grok Bot?** The published beta.46 installer cannot support 0.36.0. This candidate adds a separately verified 0.36.0 desktop gate and signed host registry; it is still undergoing live acceptance. Other versions remain unsupported. Reports are tracked in [#1](https://github.com/promptadvisers/grokrouter/issues/1) and [#7](https://github.com/promptadvisers/grokrouter/issues/7). A successful source build does not establish compatibility with a newer Grok app or cloud host.
 
 ## Install on a Mac
 
