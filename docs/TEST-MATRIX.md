@@ -1,6 +1,6 @@
 # Verification matrix
 
-Verification lock: September 9, 2026. GrokRouter `0.1.0-beta.47`, production commit `644a9c4`. All seven required live gates passed independently on official Grok Bot **0.30.0 and 0.36.0** with the same Mac artifact. Publication is a separate step.
+Verification lock: September 9, 2026. GrokRouter `0.1.0-beta.47`, production commit `644a9c4`. All seven required live gates passed independently on official Grok Bot **0.30.0 and 0.36.0** with the same Mac artifact. The protected release workflow passed and the source prerelease was published September 9, 2026. See [publication verification](release-beta47-publication.md).
 
 Source digest: `86e10453fc44d718321226487aa7f7dd5d3572c900cc96d16fe55e857b48af02`.
 Mac test ZIP SHA-256: `7d648ff8f65cf1421f83c177c217d8f95c4620834be0eefd00164bee5e2b430f`.

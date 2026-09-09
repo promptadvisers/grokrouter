@@ -1,4 +1,4 @@
-# GrokRouter 0.1.0-beta.47 — verified source candidate
+# GrokRouter 0.1.0-beta.47 — source prerelease
 
 - Restores exact reviewed host hash and byte-count verification. Structural diagnostics cannot authenticate a stock host.
 - Rejects an unknown or foreign live host even when a trusted old backup exists. Automatic repair cannot silently replace a newer incompatible host.
@@ -17,7 +17,7 @@
 - Makes source tagging depend on CI and a versioned acceptance record tied to the candidate's source digest. Keeps the existing download link until the new tag is available.
 - Adds CodeQL analysis, release validation tests, and clearer compatibility/recovery documentation.
 
-The unchanged final Mac artifact passed all seven required live gates independently on official Grok Bot 0.30.0 and 0.36.0. Codex Sol and OpenRouter Claude completed real computer tools and returned actual native child results once. Publication is pending the protected release workflow. Windows remains a source preview; 0.44.0 and unreviewed host hashes remain unsupported. Provider/helper limitations and exact receipts are recorded in [the verification matrix](docs/TEST-MATRIX.md).
+The unchanged final Mac artifact passed all seven required live gates independently on official Grok Bot 0.30.0 and 0.36.0. Codex Sol and OpenRouter Claude completed real computer tools and returned actual native child results once. Published September 9, 2026, after the protected release workflow passed. [Download tagged source](https://github.com/promptadvisers/grokrouter/releases/tag/source-v0.1.0-beta.47). Windows remains a source preview; 0.44.0 and unreviewed host hashes remain unsupported. Provider/helper limitations and exact receipts are recorded in [the verification matrix](docs/TEST-MATRIX.md).
 
 # GrokRouter 0.1.0-beta.46
 
