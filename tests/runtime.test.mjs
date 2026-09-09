@@ -2170,3 +2170,58 @@ test("a dynamic broker delivery receipt ends the turn without inventing a backgr
     assert.equal(hasDeliveryAfterLatestQuery(stateUpdate), false);
   } finally { await rm(root,{recursive:true,force:true}); }
 });
+
+test('Codex recovers an empty response once on the same thread without replaying its input', async () => {
+  const inputs = [];
+  let resumes = 0;
+  const thread = {id:'empty-recovery-thread', run:async(input) => {
+    inputs.push(input);
+    return {finalResponse:inputs.length === 1 ? '' : JSON.stringify({text:'RECOVERED_RESULT',toolCalls:[]}), usage:{input_tokens:7,output_tokens:3}};
+  }};
+  const result = await runCodex({codexThreadId:thread.id,codexModel:'gpt-test'}, [user('Finish the existing tool work')], [], () => ({
+    resumeThread:(id) => { assert.equal(id,thread.id); resumes++; return thread; },
+    startThread:() => {throw new Error('Recovery must not restart completed work');},
+  }));
+  assert.equal(result.text,'RECOVERED_RESULT');
+  assert.equal(result.retriedEmpty,true);
+  assert.equal(resumes,1);
+  assert.equal(inputs.length,2);
+  assert.match(inputs[1],/Do not repeat completed actions/);
+  assert.doesNotMatch(inputs[1],/Finish the existing tool work/);
+  assert.equal(result.usage.inputTokens,14);
+  assert.equal(result.usage.outputTokens,6);
+});
+
+test('Codex stops after two empty responses and records the provider failure', async () => {
+  const root=await mkdtemp(join(tmpdir(),'grokrouter-codex-empty-'));
+  let calls=0;
+  try {
+    const config={provider:'codex',providers:['codex'],statePath:join(root,'states.json'),auditPath:join(root,'audit.jsonl')};
+    await assert.rejects(runTurn({config,messages:[user('Perform the requested task')],sessionOptions:{botId:'empty-bot'}}, {
+      codexFactory:() => ({startThread:() => ({id:'empty-thread',run:async()=>{calls++; return {finalResponse:'',usage:{}};}})}),
+    }),/Codex SDK returned an empty response after one retry/);
+    assert.equal(calls,2);
+    const events=(await readFile(config.auditPath,'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(events.at(-1).event,'turn_error');
+    assert.match(events.at(-1).error,/Codex SDK/);
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('Codex empty recovery preserves an actual tagged child result and deduplicates its continuation', async () => {
+  const root=await mkdtemp(join(tmpdir(),'grokrouter-codex-child-empty-'));
+  let calls=0;
+  try {
+    const config={provider:'codex',providers:['codex'],statePath:join(root,'states.json'),auditPath:join(root,'audit.jsonl')};
+    const input={config,messages:[user('Delegate and return the result'),{role:'user',content:'[SAND_HIDDEN_PROMPT]Child finished: 72',providerOptions:{cursor:{sandAutomationCompletionId:'actual-child-72'}}}],sessionOptions:{botId:'child-parent'}};
+    const dependencies={codexFactory:()=>({startThread:()=>({id:'child-thread',run:async()=>{calls++;return {finalResponse:'',usage:{}};}})})};
+    const result=await runTurn(input,dependencies);
+    assert.equal(result.text,'Child finished: 72');
+    assert.equal(calls,2);
+    assert.equal((await runTurn(input,dependencies)).alreadyDelivered,true);
+    assert.equal(calls,2);
+    const events=(await readFile(config.auditPath,'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(events.find(e=>e.event==='turn_ok').emptyRecovery,'automation-completion');
+    assert.equal(events.find(e=>e.event==='turn_ok').retriedEmpty,true);
+    assert.equal(events.at(-1).reason,'automation-continuation-already-claimed-or-processed');
+  } finally {await rm(root,{recursive:true,force:true});}
+});

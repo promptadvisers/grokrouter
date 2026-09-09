@@ -1389,13 +1389,27 @@ export async function runCodex(config, messages, tools, codexFactory = null) {
     thread = codex.startThread(options);
     turn = await thread.run(await makeInput(), { outputSchema: codexOutputSchema() });
   }
-  const parsed = parseCodexResult(turn.finalResponse);
-  if (!parsed.text && !parsed.toolCalls.length) throw new Error("Codex SDK returned an empty response");
+  let parsed = parseCodexResult(turn.finalResponse);
+  let usage = normalizeUsage(turn.usage);
+  let retriedEmpty = false;
+  if (!parsed.text && !parsed.toolCalls.length) {
+    retriedEmpty = true;
+    // Stay on the same thread so completed native actions are not replayed.
+    turn = await thread.run(
+      "Your previous turn returned no answer or outer tool call. Continue from the actual results already in this thread. Do not repeat completed actions or claim a child launched without its real result. Return the required structured object with either the next necessary outer tool call or a non-empty final text answer.",
+      { outputSchema: codexOutputSchema() },
+    );
+    parsed = parseCodexResult(turn.finalResponse);
+    const retriedUsage = normalizeUsage(turn.usage);
+    usage = Object.fromEntries(Object.entries(usage).map(([key, value]) => [key, value + retriedUsage[key]]));
+  }
   return {
     ...parsed,
-    usage: normalizeUsage(turn.usage),
+    usage,
     model: config.codexModel || "gpt-5.6-sol",
     threadId: thread.id,
+    ...(!parsed.text && !parsed.toolCalls.length ? { emptyResponse: true } : {}),
+    ...(retriedEmpty ? { retriedEmpty: true } : {}),
   };
 }
 
@@ -2141,7 +2155,7 @@ export async function runTurn(input, dependencies = {}) {
       if (automationContinuation && completion?.text) {
         result = { ...result, text: completion.text, emptyResponse: false, emptyRecovery: "automation-completion" };
       } else {
-        throw new Error("OpenRouter returned an empty response after one retry");
+        throw new Error(`${state.provider === "codex" ? "Codex SDK" : "OpenRouter"} returned an empty response after one retry`);
       }
     }
     result.toolCalls = rewriteHostToolCallIds(result.toolCalls);
@@ -2216,6 +2230,7 @@ export async function runTurn(input, dependencies = {}) {
     toolNames: (result.toolCalls || []).map((call) => call.toolName).filter(Boolean),
     toolCallIds: (result.toolCalls || []).map((call) => call.toolCallId).filter(Boolean),
     ...(result.emptyRecovery ? { emptyRecovery: result.emptyRecovery } : {}),
+    ...(result.retriedEmpty ? { retriedEmpty: true } : {}),
     ...(result.recoveredTextualToolCall ? { recoveredTextualToolCall: true } : {}),
     ...(result.textualToolDiagnostics ? { textualToolDiagnostics: result.textualToolDiagnostics } : {}),
   });

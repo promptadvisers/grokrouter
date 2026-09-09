@@ -13,6 +13,7 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 - Runtime upgrades preserve per-Bot selections, saved threads, durable receipts, and audit history.
 - Brokered `SendMessage` results count as delivered answers. Historical dynamic-tool calls cannot fabricate a background-task acknowledgement.
 - Native child sessions without a user-delivery tool finish through the host response stream, preserving their final text for the parent.
+- Codex receives one recovery attempt for an empty response on the same thread. A tagged completed-child result remains available as the fallback if both responses are empty, with a redacted recovery receipt.
 - The management Doctor returns success only when its runtime syntax and host-adapter checks pass. In-chat and desktop health checks now have separately documented scopes.
 - Native workflow registration has an operation-specific diagnostic deadline long enough for the host library's readiness wait and bounded retries; ordinary transport calls keep their shorter deadlines.
 - Windows packaging uses the Electron version pinned in its dependency manifest.
