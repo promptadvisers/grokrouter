@@ -156,3 +156,9 @@ Native maintenance-boundary revision `65254d4` has source digest `ae20ebbed86bc7
 
 
 Revision 65254d4 passed both-provider native memory extraction with zero tools and no router maintenance errors, and its final 0.36.0 exact-artifact lifecycle and strict desktop Doctor passed. Fresh-Bot testing then exposed a printed delivery envelope around Luna's exact-text reply. See `acceptance-beta47-65254d4-0.36.0.md`. The literal-delivery normalization repair passes all 70 runtime tests plus 17 Python tests and the complete installer, Windows, and release suites. Source digest: `a10fdaa04f8a9ac5d75329024a1d2733636b5f684ddc363d22b07ca1d3121350`. Final acceptance remains pending.
+
+
+Literal-delivery revision `d942423` has source digest `a10fdaa04f8a9ac5d75329024a1d2733636b5f684ddc363d22b07ca1d3121350`, Mac ZIP SHA-256 `d73babe332dc800f9a4266bc7fd96bbc37ea001ee4c04fe56669c83022c2e9dc`, runtime SHA-256 `49e289d66c459007312f3711b453eae4a9db822e2c71197cdba596bc822391ac`, and clean source ZIP SHA-256 `7d68bf4563ec863f40a86e06559aaa5dd5ae443e73776fba30423f50c3429f38`. Full automated checks, Mac build, and independent clean-source installation pass. Its host adapter is unchanged from 65254d4; only runtime response normalization changed. Live regression and final acceptance remain pending.
+
+
+Revision d942423 installed on official 0.36.0 and registered all six commands for 37 Bots/channels. The repeated literal request at 09:33:26 returned one printed `CallDynamicTool` wrapper at 09:33:31, with namespace `cursor`, tool name `SendToUser`, and arguments containing the exact requested text. The direct-delivery decoder did not recognize this brokered form. The next correction accepts only that complete known broker envelope, rejects extra outer/inner keys and other namespaces/tools, and still requires exact requested text. It never executes the wrapper. Final acceptance remains pending.

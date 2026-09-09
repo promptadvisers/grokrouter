@@ -2655,9 +2655,19 @@ test("literal replies unwrap only an exact matching final delivery envelope with
   const previous=process.env.OPENROUTER_API_KEY;process.env.OPENROUTER_API_KEY=TEST_OPENROUTER_KEY;
   const marker="to=functions.SendToUser  code\u5927\u5c0f\u89c4\u5f8b\n";
   const json=JSON.stringify({type:"text",content:"FRESH_BOT_TEXT_OK"});
+  const brokerMarker="to=functions.CallDynamicTool code\u5f69\u7968\u8bba\u575b\n";
+  const broker={namespace:"cursor",toolName:"SendToUser",arguments:{type:"text",content:"FRESH_BOT_TEXT_OK"}};
   const cases=[
     [marker+json,"FRESH_BOT_TEXT_OK",true],
     ["```text\n"+marker+json+"\n```","FRESH_BOT_TEXT_OK",true],
+    [brokerMarker+JSON.stringify(broker),"FRESH_BOT_TEXT_OK",true],
+    ["```text\n"+brokerMarker+JSON.stringify(broker)+"\n```","FRESH_BOT_TEXT_OK",true],
+    [brokerMarker+JSON.stringify({...broker,namespace:"other"}),null,false],
+    [brokerMarker+JSON.stringify({...broker,toolName:"Shell"}),null,false],
+    [brokerMarker+JSON.stringify({...broker,recipient:"elsewhere"}),null,false],
+    [brokerMarker+JSON.stringify({...broker,arguments:{...broker.arguments,recipient:"elsewhere"}}),null,false],
+    [brokerMarker+JSON.stringify({...broker,arguments:{type:"text",content:"OTHER"}}),null,false],
+    [brokerMarker+JSON.stringify(broker)+" Extra prose",null,false],
     [marker+json.replace("FRESH_BOT_TEXT_OK","OTHER"),null,false],
     [marker+JSON.stringify({type:"text",content:"FRESH_BOT_TEXT_OK",recipient:"elsewhere"}),null,false],
     [marker.replace("SendToUser","Shell")+json,null,false],

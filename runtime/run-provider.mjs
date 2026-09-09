@@ -1190,12 +1190,16 @@ function unwrapLiteralDeliveryText(text, request) {
   const expected = /^["'`]/.test(literal) ? literal.slice(1, -1) : literal;
   // Decode only a complete delivery envelope containing the exact requested
   // literal. This is plain-text normalization, never an executable tool call.
-  const marker = text.match(/^\s*(?:```[^\n]*\n)?to=functions\.SendToUser\b[^{}]{0,320}(?=\{)/i);
+  const marker = text.match(/^\s*(?:```[^\n]*\n)?to=functions\.(SendToUser|CallDynamicTool)\b[^{}]{0,320}(?=\{)/i);
   if (!marker) return text;
   const json = balancedJsonObject(text, marker[0].length);
   if (!json || !/^\s*(?:```)?\s*$/.test(text.slice(marker[0].length + json.length))) return text;
   try {
-    const value = JSON.parse(json);
+    const envelope = JSON.parse(json);
+    const brokered = marker[1].toLowerCase() === "calldynamictool";
+    if (brokered && (envelope?.namespace !== "cursor" || envelope.toolName !== "SendToUser"
+        || !Object.keys(envelope).every(key => ["namespace", "toolName", "arguments"].includes(key)))) return text;
+    const value = brokered ? envelope.arguments : envelope;
     if (value?.type === "text" && value.content === expected
         && Object.keys(value).every(key => ["type", "content"].includes(key))) return expected;
   } catch {}
