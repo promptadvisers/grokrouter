@@ -304,6 +304,23 @@ else
   printf '[3/6] OpenRouter-only setup needs no dependency download\n'
 fi
 
+# Runtime replacement must retain Bot selections, provider threads, durable
+# delivery receipts, and the redacted audit. Temporary files and process locks
+# belong to the previous process generation and must not survive the swap.
+python3 - "$INSTALL_ROOT" "$STAGE_ROOT" <<'PYSTATE'
+from pathlib import Path
+import shutil, sys
+source, destination = map(Path, sys.argv[1:])
+for name in ("conversation-states.json", "audit.jsonl", "audit.jsonl.1"):
+    existing = source / name
+    if existing.is_file():
+        shutil.copy2(existing, destination / name)
+existing = source / "conversation-states"
+if existing.is_dir():
+    shutil.copytree(existing, destination / "conversation-states",
+                    ignore=shutil.ignore_patterns("*.lock", "*.tmp"))
+PYSTATE
+
 emit_phase "ACTIVATE_RUNTIME"
 printf '[4/6] Activating runtime atomically\n'
 if [[ -e "$INSTALL_ROOT" ]]; then

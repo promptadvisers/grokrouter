@@ -34,3 +34,9 @@ Unit and integration tests assert this path returns a deterministic control rece
 The repaired native Models invocation returned exact configured catalogs on both Codex and OpenRouter in a second genuinely new Bot. A subsequent normal identity question exposed a separate failure: the correct answer was followed by a false background-task launch acknowledgement.
 
 The redacted audit showed a `CallDynamicTool` call and matching result before the empty-response recovery. Grok had already delivered the answer through that broker. The receipt guard now recognizes a broker invocation of an internal message-delivery tool, using its matching tool-call ID. State updates and unrelated dynamic tools do not count as answer delivery. The generic fallback that inferred a background launch from any historical `CallDynamicTool` has been removed. Tests cover both current delivery and an unrelated historical Shell invocation; live retesting remains required.
+
+## Reinstall state preservation
+
+A reinstall changed the test Bot from its selected OpenRouter model to the installer default. The runtime swap copied provider configuration but omitted the per-Bot state directory. The candidate now carries the state directory, legacy state file, and redacted audit history into the new runtime; temporary writes and process locks are excluded.
+
+The installer integration test creates two Bots with different providers and models, establishes a Codex thread, reinstalls with a different default, and verifies both existing selections, the resumed thread, a new Bot's default, and the pre-upgrade audit. Those checks pass. Retained previous runtime directories remain untouched. This is separate from the live upgrade acceptance gate.

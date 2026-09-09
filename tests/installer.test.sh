@@ -315,6 +315,24 @@ assert config["openRouterModels"] == [
     "google/gemini-3.1-flash-lite",
 ]
 PY
+node --input-type=module - "$TEST_RUNTIME" <<'NODESTATE'
+import {readFile, mkdir, writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const root = process.argv[2];
+const {runTurn} = await import(pathToFileURL(join(root, 'run-provider.mjs')));
+const config = JSON.parse(await readFile(join(root, 'provider.json')));
+for (const [botId, text] of [['preserve-one','/provider openrouter'],['preserve-one','/model openai/gpt-5.6-luna'],['preserve-two','/provider codex'],['preserve-two','/model gpt-5.6-terra']]) {
+  const result = await runTurn({config, messages:[{role:'user',content:text}], sessionOptions:{botId}});
+  if (!result.control) throw new Error('State fixture must use deterministic controls');
+}
+await runTurn({config, messages:[{role:'user',content:'Establish thread continuity'}], sessionOptions:{botId:'preserve-two'}}, {
+  codexFactory:()=>({startThread:()=>({id:'saved-upgrade-thread',run:async()=>({finalResponse:JSON.stringify({text:'THREAD_SAVED',toolCalls:[]})})})}),
+});
+await mkdir(join(root,'conversation-states','old.json.lock'));
+await writeFile(join(root,'conversation-states','stale.tmp'),'incomplete');
+NODESTATE
+
 python3 - "$TEST_RUNTIME/provider.json" <<'PY'
 import json
 import sys
@@ -329,6 +347,7 @@ config.update({
 with open(path, "w") as output:
     json.dump(config, output)
 PY
+cp "$TEST_RUNTIME/audit.jsonl" "$TEMPORARY/pre-upgrade-audit"
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
@@ -340,6 +359,32 @@ bash "$PAYLOAD/remote/install.sh" \
   --no-restart \
   >"$TEMPORARY/install-reuse.log"
 grep -q 'Reusing the already verified pinned Codex runtime' "$TEMPORARY/install-reuse.log"
+cmp "$TEMPORARY/pre-upgrade-audit" "$TEST_RUNTIME/audit.jsonl"
+node --input-type=module - "$TEST_RUNTIME" <<'NODESTATE'
+import assert from 'node:assert/strict';
+import {readFile, stat} from 'node:fs/promises';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const root = process.argv[2];
+const {runTurn} = await import(pathToFileURL(join(root, 'run-provider.mjs')));
+const config = JSON.parse(await readFile(join(root,'provider.json')));
+for (const [botId, provider, model] of [['preserve-one','openrouter','openai/gpt-5.6-luna'],['preserve-two','codex','gpt-5.6-terra'],['new-after-upgrade','openrouter','openai/gpt-5.6-luna']]) {
+  const result = await runTurn({config, messages:[{role:'user',content:'/provider'}], sessionOptions:{botId}});
+  assert.equal(result.provider,provider);
+  assert.equal(result.model,model);
+}
+const resumed = await runTurn({config, messages:[{role:'user',content:'Resume the saved thread'}], sessionOptions:{botId:'preserve-two'}}, {
+  codexFactory:()=>({resumeThread:(id)=>{
+    assert.equal(id,'saved-upgrade-thread');
+    return {id,run:async()=>({finalResponse:JSON.stringify({text:'THREAD_RESUMED',toolCalls:[]})})};
+  },startThread:()=>{throw new Error('Upgrade lost the Codex thread');}}),
+});
+assert.equal(resumed.text,'THREAD_RESUMED');
+assert.match(await readFile(join(root,'audit.jsonl'),'utf8'), /control_turn/);
+await assert.rejects(stat(join(root,'conversation-states','old.json.lock')), {code:'ENOENT'});
+await assert.rejects(stat(join(root,'conversation-states','stale.tmp')), {code:'ENOENT'});
+NODESTATE
+
 "$TEST_BIN/grokbot-router" status | grep -q 'Default provider: openrouter'
 "$TEST_BIN/grokbot-router" status | grep -q 'OpenRouter model: openai/gpt-5.6-luna'
 grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"

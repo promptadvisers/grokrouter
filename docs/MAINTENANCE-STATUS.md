@@ -10,6 +10,7 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 - Channel-control suppression is scoped to the host's root request, preserving unrelated conversations and explicit controls.
 - Official Grok Bot 0.36.0 has a separate exact desktop gate, reviewed host entry, signed registry, and persisted version selection. macOS checks the vendor signature before installation.
 - Native skill-menu invocations are parsed from the observed expanded recipe and trailing mention. Mismatched names and unrelated prose do not gain command authority.
+- Runtime upgrades preserve per-Bot selections, saved threads, durable receipts, and audit history.
 - Windows packaging uses the Electron version pinned in its dependency manifest.
 - Release version consistency, per-version live evidence, and passing CI are required before source tagging. The README retains the last published download until the new tag exists.
 
@@ -20,7 +21,7 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 - GitHub Mac and Windows builds and CodeQL passed on `5eeb8ee`; later commits require their own successful checks.
 - The candidate installed on official Grok Bot 0.36.0. The native menu's Models failure was reproduced in a genuinely new Bot, repaired, and is being retested on the rebuilt artifact.
 - The source installer builds and installs into a clean test Applications directory. This does not substitute for the live restore/reinstall or capability gates.
-- Main now requires the Mac and Windows checks and pull-request merging. Secret scanning, push protection, Dependabot security updates, and CodeQL are enabled.
+- Main now requires the Mac, Windows, and CodeQL checks and pull-request merging. Secret scanning, push protection, Dependabot security updates, and CodeQL are enabled.
 
 ## Issue disposition
 
