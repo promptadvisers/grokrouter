@@ -28,3 +28,9 @@ The native Models menu entry reached inference and generated an incorrect single
 The own test Bot transcript shows that Grok expands a selected native skill into a complete invocation wrapper with its folder, recipe, and trailing @models mention. The candidate had mistaken the wrapper's explicit invocation for unrelated visible prose. The repair recognizes the complete observed wrapper and its matching GrokRouter marker. Unrelated prose, mismatched names, and retained definitions remain rejected.
 
 Unit and integration tests assert this path returns a deterministic control receipt and never calls provider inference. Live retesting on a rebuilt artifact is in progress. No capability or release gate is marked passed yet.
+
+## Live delivery recovery defect
+
+The repaired native Models invocation returned exact configured catalogs on both Codex and OpenRouter in a second genuinely new Bot. A subsequent normal identity question exposed a separate failure: the correct answer was followed by a false background-task launch acknowledgement.
+
+The redacted audit showed a `CallDynamicTool` call and matching result before the empty-response recovery. Grok had already delivered the answer through that broker. The receipt guard now recognizes a broker invocation of an internal message-delivery tool, using its matching tool-call ID. State updates and unrelated dynamic tools do not count as answer delivery. The generic fallback that inferred a background launch from any historical `CallDynamicTool` has been removed. Tests cover both current delivery and an unrelated historical Shell invocation; live retesting remains required.

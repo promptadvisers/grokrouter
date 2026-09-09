@@ -15,6 +15,7 @@ const CHANNEL_CONTROL_LATCH_TTL_MS = 30_000;
 const INTERNAL_DELIVERY_TOOLS = new Set([
   "sendtouser",
   "sendmessage",
+  "send_message",
   "senduser",
   "reacttomessage",
   "update_state",
@@ -384,6 +385,17 @@ function latestInputBoundaryIndex(messages) {
   return Math.max(latestUserIndex(messages), latestAutomationCompletionIndex(messages));
 }
 
+function isDeliveryToolCall(call) {
+  const normalize = (name) => String(name || '').toLowerCase().replaceAll('_', '').replaceAll('-', '');
+  const deliveries = new Set(['sendtouser', 'sendmessage', 'senduser']);
+  const name = normalize(call.function?.name);
+  if (deliveries.has(name)) return true;
+  if (name !== 'calldynamictool') return false;
+  let args;
+  try { args = JSON.parse(call.function?.arguments || '{}'); } catch { return false; }
+  return deliveries.has(normalize(args?.toolName));
+}
+
 export function hasDeliveryAfterLatestQuery(messages) {
   // A completed background subagent is injected after the visible user turn as
   // a hidden automation-completion message. It starts a continuation of the
@@ -398,7 +410,7 @@ export function hasDeliveryAfterLatestQuery(messages) {
       ?? messages[index]?.message?.content
       ?? messages[index]?.data?.content;
     for (const call of toolCallsFromGrokContent(content)) {
-      if (INTERNAL_DELIVERY_TOOLS.has(String(call.function?.name || "").toLowerCase())) {
+      if (isDeliveryToolCall(call)) {
         sendCallOrigins.set(call.id, index);
       }
     }
@@ -421,7 +433,7 @@ export function hasDeliveryAfterLatestQuery(messages) {
     if (messageRole(message) !== "assistant") continue;
     const content = message?.content ?? message?.message?.content ?? message?.data?.content;
     for (const call of toolCallsFromGrokContent(content)) {
-      if (!INTERNAL_DELIVERY_TOOLS.has(String(call.function?.name || "").toLowerCase())) {
+      if (!isDeliveryToolCall(call)) {
         pendingToolCalls.add(call.id);
       }
     }
@@ -1951,15 +1963,6 @@ async function readStdin(limitBytes = MAX_INPUT_BYTES) {
   });
 }
 
-function transcriptHasToolCall(messages, names) {
-  const wanted = new Set((Array.isArray(names) ? names : [names]).map((name) => String(name).toLowerCase()));
-  return (Array.isArray(messages) ? messages : []).some((message) => {
-    const content = message?.content ?? message?.message?.content ?? message?.data?.content;
-    return toolCallsFromGrokContent(content)
-      .some((call) => wanted.has(String(call.function?.name || "").toLowerCase()));
-  });
-}
-
 function rewriteHostToolCallIds(toolCalls) {
   return (Array.isArray(toolCalls) ? toolCalls : []).map((call) => ({
     ...call,
@@ -2137,13 +2140,6 @@ export async function runTurn(input, dependencies = {}) {
       const completion = latestAutomationCompletion(messages);
       if (automationContinuation && completion?.text) {
         result = { ...result, text: completion.text, emptyResponse: false, emptyRecovery: "automation-completion" };
-      } else if (transcriptHasToolCall(messages, "CallDynamicTool")) {
-        result = {
-          ...result,
-          text: "Background task launched. I’ll report its finished result when it arrives.",
-          emptyResponse: false,
-          emptyRecovery: "dynamic-task-wait",
-        };
       } else {
         throw new Error("OpenRouter returned an empty response after one retry");
       }

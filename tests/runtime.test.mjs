@@ -2112,3 +2112,61 @@ test("runner rejects oversized stdin indirectly through a normal exported turn c
     await rm(root, { recursive: true, force: true });
   }
 });
+
+
+test("an old dynamic tool call cannot fabricate a background-task launch on an empty response", async () => {
+  const root = await mkdtemp(join(tmpdir(), 'grokrouter-empty-history-'));
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  let requests = 0;
+  try {
+    await assert.rejects(runTurn({
+      config: {provider:'openrouter', providers:['openrouter'], openRouterModel:'test/model', statePath:join(root,'state.json'), auditPath:join(root,'audit.jsonl')},
+      messages: [
+        user('Run the earlier task'),
+        {role:'assistant', content:[{type:'tool-call',toolCallId:'old-shell',toolName:'CallDynamicTool',args:{toolName:'Shell',arguments:{command:'pwd'}}}]},
+        {role:'tool',content:[{type:'tool-result',toolCallId:'old-shell',toolName:'CallDynamicTool',result:'/workspace'}]},
+        user('What provider and model are you using?'),
+      ],
+      sessionOptions:{botId:'empty-history-test'},
+    }, {fetchImpl:async () => {
+      requests += 1;
+      return new Response(JSON.stringify({choices:[{message:{content:null,tool_calls:[]}}]}), {status:200});
+    }}), /empty response after one retry/);
+    assert.equal(requests, 2);
+    const audit = await readFile(join(root,'audit.jsonl'),'utf8');
+    assert.doesNotMatch(audit, /dynamic-task-wait/);
+    assert.match(audit, /turn_error/);
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+    await rm(root,{recursive:true,force:true});
+  }
+});
+
+
+test("a dynamic broker delivery receipt ends the turn without inventing a background task", async () => {
+  const root = await mkdtemp(join(tmpdir(), 'grokrouter-broker-delivery-'));
+  const messages = [
+    user('What provider and model are you using?'),
+    {role:'assistant',content:[{type:'tool-call',toolCallId:'delivery-1',toolName:'CallDynamicTool',args:{namespace:'cursor',toolName:'send_message',arguments:{text:'Identity answer'}}}]},
+    {role:'tool',content:[{type:'tool-result',toolCallId:'delivery-1',toolName:'CallDynamicTool',result:{success:{messageId:'visible-message-1'}}}]},
+  ];
+  try {
+    assert.equal(hasDeliveryAfterLatestQuery(messages), true);
+    const output = await runTurn({
+      config:{provider:'openrouter',providers:['openrouter'],statePath:join(root,'state.json'),auditPath:join(root,'audit.jsonl')},
+      messages, sessionOptions:{botId:'broker-delivery-bot'},
+    }, {fetchImpl:async()=>{throw new Error('delivered turn leaked to inference');}});
+    assert.equal(output.alreadyDelivered,true);
+    assert.equal(output.text,'');
+    assert.match(await readFile(join(root,'audit.jsonl'),'utf8'), /delivery-after-latest-input/);
+    assert.equal(hasDeliveryAfterLatestQuery([...messages,user('New request')]), false);
+    const shell = structuredClone(messages);
+    shell[1].content[0].args.toolName = 'Shell';
+    assert.equal(hasDeliveryAfterLatestQuery(shell), false);
+    const stateUpdate = structuredClone(messages);
+    stateUpdate[1].content[0].toolName = 'update_state';
+    assert.equal(hasDeliveryAfterLatestQuery(stateUpdate), false);
+  } finally { await rm(root,{recursive:true,force:true}); }
+});
