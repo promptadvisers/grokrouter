@@ -607,6 +607,7 @@ def patch_text(source: str) -> str:
             f"{match.group(1)}"
             "          ...(boxId != null ? { botId: typeof boxId === \"string\" ? boxId : JSON.stringify(boxId) || String(boxId) } : {}),\n"
             "          ...(typeof rawTranscriptText === \"string\" && rawTranscriptText ? { grokBotRouterControlText: rawTranscriptText } : {}),\n"
+            "          ...(typeof options2 !== \"undefined\" && options2.isGroupMemberTurn === true && options2.grokBotRouterGroupContext ? { grokBotRouterGroupContext: options2.grokBotRouterGroupContext } : {}),\n"
             f"{match.group(2)}"
         ),
         source,
@@ -614,6 +615,19 @@ def patch_text(source: str) -> str:
     )
     if identity_count != 1:
         raise PatchError(f"Session identity anchor count was {identity_count}; expected 1")
+
+    group_anchor = "const memberResult = await runner.run(promptForAttempt, {"
+    if source.count(group_anchor) != 1:
+        raise PatchError("Group member dispatch anchor must occur exactly once")
+    source = source.replace(group_anchor, group_anchor + "\n" + """
+                  grokBotRouterGroupContext: {
+                    roomId: roomSession.id,
+                    memberId: request3.member.id,
+                    memberName: request3.member.name,
+                    message: [...(this.tm.sessions.activeSession?.id === roomSession.id ? getTranscript() : roomSession.db.getTranscriptEntries())]
+                      .reverse().find((entry) => entry.kind === "message" && entry.role === "user")
+                  },
+""", 1)
 
     return source
 

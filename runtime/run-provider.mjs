@@ -1823,6 +1823,27 @@ function channelControlKey(sessionOptions) {
   return createHash("sha256").update(String(root)).digest("hex");
 }
 
+function nativeGroupControl(sessionOptions) {
+  const context = sessionOptions.grokBotRouterGroupContext;
+  const message = context?.message;
+  if (!context || typeof context.roomId !== "string" || !context.roomId
+      || typeof context.memberId !== "string" || !context.memberId
+      || typeof context.memberName !== "string" || !context.memberName
+      || message?.kind !== "message" || message.role !== "user"
+      || typeof message.id !== "string" || !message.id
+      || typeof message.content !== "string") return null;
+  const raw = message.content.trim();
+  const text = addressedRouterControlText(raw);
+  if (!ROUTER_CONTROL_PREFIX.test(text)) return null;
+  const prefix = raw.slice(0, raw.indexOf(text)).trim()
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\[(?:\/?)(?:mention|bot)[^\]]*\]/gi, " ")
+    .replace(/\uFFFC/g, " ").replace(/\s+/g, " ").trim();
+  const addressed = !prefix || prefix.toLowerCase() === `@${context.memberName}`.toLowerCase();
+  const id = createHash("sha256").update(JSON.stringify([context.roomId, message.id, context.memberId])).digest("hex");
+  return { text, addressed, id };
+}
+
 function channelControlLatchPath(config, sessionOptions) {
   const key = channelControlKey(sessionOptions);
   if (!key) return "";
@@ -1858,6 +1879,10 @@ async function hasRecentChannelControl(config, sessionOptions) {
 }
 
 function isChannelControlFollowOn(sessionOptions) {
+  const groupMessage = sessionOptions.grokBotRouterGroupContext?.message;
+  if (groupMessage?.kind === "message" && groupMessage.role === "user"
+      && typeof groupMessage.id === "string" && groupMessage.id
+      && typeof groupMessage.content === "string") return false;
   const hasFreshRawUserText = typeof sessionOptions.grokBotRouterControlText === "string"
     && sessionOptions.grokBotRouterControlText.trim();
   return !hasFreshRawUserText
@@ -2139,9 +2164,26 @@ export async function runTurn(input, dependencies = {}) {
       return suppressed("automation-continuation-already-claimed-or-processed");
     }
   }
+  const groupControl = automationContinuation ? null : nativeGroupControl(sessionOptions);
+  if (groupControl && !groupControl.addressed) {
+    return suppressed("channel-control-not-addressed");
+  }
+  let groupControlClaim = "";
+  if (groupControl) {
+    groupControlClaim = createHash("sha256").update(JSON.stringify([groupControl.id, failedDeliveries])).digest("hex");
+    let claimed = false;
+    const updated = await mutateState(config, key, state, (current) => {
+      const receipts = current.processedGroupControls || [];
+      if (receipts.includes(groupControlClaim)) return current;
+      claimed = true;
+      return { ...current, processedGroupControls: [...receipts, groupControlClaim].slice(-64) };
+    });
+    Object.assign(state, updated);
+    if (!claimed) return suppressed("channel-control-already-processed");
+  }
   const latestVisibleControl = structuredRouterControlText(messages)
     || addressedRouterControlText(latestUserText(messages));
-  const explicitControl = hostRouterControlText(messages, sessionOptions)
+  const explicitControl = groupControl?.text || hostRouterControlText(messages, sessionOptions)
     || (ROUTER_CONTROL_PREFIX.test(latestVisibleControl) ? latestVisibleControl : "");
   if (!automationContinuation
       && !explicitControl
@@ -2152,9 +2194,15 @@ export async function runTurn(input, dependencies = {}) {
   const controlText = explicitControl
     || nativeWorkflowControlText(messages)
     || latestVisibleControl;
-  const control = automationContinuation
-    ? null
-    : await controlResult(config, key, state, controlText);
+  let control;
+  try {
+    control = automationContinuation ? null : await controlResult(config, key, state, controlText);
+  } catch (error) {
+    if (groupControlClaim) await mutateState(config, key, state, (current) => ({
+      ...current, processedGroupControls: (current.processedGroupControls || []).filter((id) => id !== groupControlClaim),
+    }));
+    throw error;
+  }
   if (control) {
     await rememberChannelControl(config, sessionOptions);
     await appendAudit(config, {

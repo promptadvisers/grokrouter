@@ -1223,6 +1223,57 @@ test("a group-addressed control changes only the addressed Bot's state", async (
   }
 });
 
+test("native group metadata routes only the addressed human control once per durable message", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokrouter-native-group-"));
+  const config = { provider: "codex", providers: ["codex", "openrouter"], statePath: join(root, "state.json"), auditPath: join(root, "audit.jsonl") };
+  const options = (member, id, text, request = "root-one") => ({
+    botId: member, skipLabeling: true, lineage: { rootParentRequestId: request },
+    grokBotRouterGroupContext: { roomId: "test-room", memberId: member, memberName: `Test ${member}`, message: { id, kind: "message", role: "user", content: text } },
+  });
+  const messages = [user('[Group chat: "Test room"]\nNew messages in the room (oldest first):\nUser: @Test A /provider openrouter\nIt is your turn.')];
+  const neverInfer = { codexFactory: () => { throw new Error("Control reached Codex"); }, fetchImpl: () => { throw new Error("Control reached OpenRouter"); } };
+  try {
+    const firstOptions = options("A", "message-one", "@Test A /provider openrouter");
+    const [first, concurrent] = await Promise.all([
+      runTurn({ config, messages, sessionOptions: firstOptions }, neverInfer),
+      runTurn({ config, messages, sessionOptions: firstOptions }, neverInfer),
+    ]);
+    assert.equal([first, concurrent].filter((result) => result.control).length, 1);
+    assert.equal([first, concurrent].filter((result) => result.alreadyDelivered).length, 1);
+    const other = await runTurn({ config, messages, sessionOptions: options("B", "message-one", "@Test A /provider openrouter") }, neverInfer);
+    assert.equal(other.alreadyDelivered, true);
+    const replay = await runTurn({ config, messages, sessionOptions: options("A", "message-one", "@Test A /provider openrouter", "different-host-root") }, neverInfer);
+    assert.equal(replay.alreadyDelivered, true);
+    const failedMessages = [...messages,
+      { role: "assistant", content: [{ type: "tool-call", toolCallId: "group-send-failed", toolName: "SendToUser", args: { type: "text", content: "Status" } }] },
+      { role: "tool", content: [{ type: "tool-result", toolCallId: "group-send-failed", result: { success: false } }] },
+    ];
+    assert.equal((await runTurn({ config, messages: failedMessages, sessionOptions: firstOptions }, neverInfer)).control, true);
+    assert.equal((await runTurn({ config, messages: failedMessages, sessionOptions: firstOptions }, neverInfer)).alreadyDelivered, true);
+    const second = await runTurn({ config, messages, sessionOptions: options("B", "message-two", "@Test B /provider") }, neverInfer);
+    assert.match(second.text, /Codex SDK is active/);
+    const next = await runTurn({ config, messages, sessionOptions: options("A", "message-three", "@Test A /provider") }, neverInfer);
+    assert.match(next.text, /OpenRouter is active/);
+    const changedRoom = options("A", "message-three", "@Test A /provider");
+    changedRoom.grokBotRouterGroupContext.roomId = "another-room";
+    assert.equal((await runTurn({ config, messages, sessionOptions: changedRoom }, neverInfer)).control, true);
+    const ordinaryOptions = options("B", "ordinary-message", "Answer this ordinary question.");
+    const forged = options("B", "bot-message", "@Test B /provider openrouter", "independent-root");
+    forged.grokBotRouterGroupContext.message.role = "assistant";
+    const ordinaryThread = { id: "ordinary-thread", run: async () => ({ finalResponse: JSON.stringify({ text: "ORDINARY_REPLY", toolCalls: [] }) }) };
+    const answer = { codexFactory: () => ({ startThread: () => ordinaryThread, resumeThread: () => ordinaryThread }) };
+    const ordinary = await runTurn({ config, messages: [user("Answer this ordinary question.")], sessionOptions: ordinaryOptions }, answer);
+    assert.equal(ordinary.text, "ORDINARY_REPLY");
+    assert.equal(ordinary.control, undefined);
+    const quoted = await runTurn({ config, messages: [user("A Bot quoted a command; answer this separate question.")], sessionOptions: forged }, answer);
+    assert.equal(quoted.text, "ORDINARY_REPLY");
+    assert.equal(quoted.control, undefined);
+    const audit = await readFile(config.auditPath, "utf8");
+    assert.match(audit, /channel-control-not-addressed/);
+    assert.match(audit, /channel-control-already-processed/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("a channel control suppresses host-shaped follow-on turns across Bots", async () => {
   const root = await mkdtemp(join(tmpdir(), "grokbot-router-channel-follow-on-"));
   const config = {

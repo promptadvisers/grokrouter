@@ -26,6 +26,8 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 
 - Codex automatic greetings now expose zero outer tools and enforce an empty structured tool-call array, including empty-response recovery and malformed output. A final-candidate audit exposed one unnecessary discovery call behind an otherwise normal greeting.
 
+- Native group controls receive the latest human transcript entry and durable room/message/member identity from the host dispatcher. Addressed controls execute once, other members suppress them with explicit audit reasons, and fresh ordinary input remains independent. This fixes a live channel-envelope failure and requires final-candidate retesting.
+
 ## Verified so far
 
 - The automated runtime, patcher, installer/payload, Windows-contract, and release/compatibility suites pass locally.

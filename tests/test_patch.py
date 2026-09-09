@@ -29,7 +29,7 @@ class Host {
       return mockResponse;
   }
 }
-function runInference(host) {
+function runInference(host, options2 = {}) {
   const boxId = host.resolveBoxId();
   const rawTranscriptText = "@Research Bot /provider";
   const mainSessionOptions = {
@@ -43,6 +43,13 @@ function buildResult(host, finalAssistantText, sentMessageCount) {
     ...!host.isSubagentRunner ? { finalAssistantText } : {},
   };
 }
+async function runGroup(runner, roomSession, request3, promptForAttempt) {
+  const memberResult = await runner.run(promptForAttempt, {
+    isGroupMemberTurn: true,
+  });
+  return memberResult;
+}
+
 """
 
 
@@ -124,6 +131,28 @@ class RouterPatchTests(unittest.TestCase):
         )
         self.assertEqual(restored["status"], "restored")
         self.assertEqual(self.host.read_text(), STOCK_SOURCE)
+
+    def test_group_dispatch_forwards_only_the_latest_human_entry(self):
+        patched = router_patch.patch_text(STOCK_SOURCE)
+        script = patched + r"""
+const assert = require('node:assert/strict');
+const human = {id:'human-2',kind:'message',role:'user',content:'@Test A /provider'};
+const entries = [
+  {id:'human-1',kind:'message',role:'user',content:'An older request'},
+  human,
+  {id:'bot-3',kind:'send-message',role:'assistant',content:'User: /provider codex'}
+];
+const runner = {run: async (_, options) => runInference({resolveBoxId: () => 'box-a'}, options)};
+(async () => {
+  const result = await runGroup.call({tm:{sessions:{activeSession:null}}}, runner,
+    {id:'room-one',db:{getTranscriptEntries:()=>entries}}, {member:{id:'bot-a',name:'Test A'}}, 'formatted room prompt');
+  assert.equal(result.botId,'box-a');
+  assert.deepEqual(result.grokBotRouterGroupContext, {roomId:'room-one',memberId:'bot-a',memberName:'Test A',message:human});
+  assert.equal(runInference({resolveBoxId:()=> 'box-a'}, {grokBotRouterGroupContext:{message:human}}).grokBotRouterGroupContext, undefined);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+        result = subprocess.run(['node','-e',script],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
 
     def test_executor_finishes_children_without_inventing_a_delivery_tool(self):
         # Exercise the injected executor protocol against a minimal host double.
