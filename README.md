@@ -38,7 +38,7 @@ GrokRouter is an experimental, unofficial, reversible model router. Each Bot rem
    /provider
    ```
 
-   Doctor must identify the installed candidate and report healthy runtime and adapter state. `/provider` must name the provider and model you selected. Send a normal message and verify it produces one answer.
+   In-chat Doctor must identify the installed router and report runtime and credential health. Use the desktop **Check health** action to verify the live host adapter and stock backup. `/provider` must name the provider and model you selected. Send a normal message and verify it produces one answer.
 
 The slash-suggestion menu is a convenience. If an entry is missing, type the complete command manually; a menu entry alone does not prove routing works.
 

@@ -192,16 +192,21 @@ PY
     ;;
   doctor)
     require_config
-    doctor_ok=1
+    doctor_status=0
     printf 'Runtime\n'
     printf '  Node: %s\n' "$(node -v)"
     printf '  Provider runner: '
-    node --check "$INSTALL_ROOT/run-provider.mjs" >/dev/null && printf 'OK\n'
+    if node --check "$INSTALL_ROOT/run-provider.mjs" >/dev/null; then
+      printf 'OK\n'
+    else
+      printf 'FAILED\n'
+      doctor_status=1
+    fi
     printf 'Host adapter\n'
     if ! doctor_output="$(run_patch_doctor 2>&1)"; then
       refresh_registry_args || true
       if ! doctor_output="$(run_patch_doctor 2>&1)"; then
-        doctor_ok=0
+        doctor_status=1
       fi
     fi
     printf '%s\n' "$doctor_output"
@@ -234,7 +239,7 @@ PY
     printf '  Registration is managed per Bot by the GrokRouter desktop installer.\n'
     printf '  Run Repair in GrokRouter to sync Bots or channels created after installation.\n'
     printf 'GROKBOT_ROUTER_DOCTOR_DONE\n'
-    exit "$doctor_ok"
+    exit "$doctor_status"
     ;;
   repair)
     repair_host

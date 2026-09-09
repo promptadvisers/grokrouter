@@ -6,8 +6,8 @@ This is the acceptance test. An existing Bot is not enough: create a brand-new B
 
 1. Create a brand-new Bot in Grok Bot.
 2. Wait for its automatic greeting. Confirm it is one short normal greeting with no router error, tool permission prompt, launch acknowledgement, or dynamic-tool activity in the audit.
-3. Type `/` without sending. Confirm Grok's native suggestion menu lists `provider`, `models`, `model`, `reasoning`, `router`, and `doctor`, or that `/router doctor` reports an explicit user-skill name conflict for any missing entry.
-4. Select `/doctor` from the menu and send it. Confirm the candidate router version, slash-discovery status, and credential/runtime health. `/router doctor` must return the same health receipt.
+3. Type `/` without sending. Filter by each name if the menu limits its initial results. Confirm the native suggestions include `provider`, `models`, `model`, `reasoning`, `router`, and `doctor`. For any missing entry, require an explicit user-skill conflict in the desktop installer's registration receipt; an unexplained missing entry fails.
+4. Select `/doctor` from the menu and send it. Confirm the candidate router version and credential/runtime health. `/router doctor` must return the same health receipt. Separately run desktop **Check health** and verify the live host adapter and stock backup. In-chat Doctor does not inspect the adapter or native workflow registration.
 5. Select `/models` from the menu and send it. Confirm the list ends with an explicit switch instruction.
 6. Paste one listed `vendor/model` ID by itself and send it.
 7. Send `/provider`. Confirm the exact provider and model.

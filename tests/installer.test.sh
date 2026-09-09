@@ -389,6 +389,37 @@ NODESTATE
 "$TEST_BIN/grokbot-router" status | grep -q 'OpenRouter model: openai/gpt-5.6-luna'
 grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"
 [[ ! -e "$TEST_GROK_SKILLS/provider" && ! -L "$TEST_GROK_SKILLS/provider" ]]
+
+# Doctor's process status must agree with its real runtime and host checks.
+run_test_doctor() {
+  ROUTER_PATCH_HOST="$TEST_HOST" \
+  ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
+  ROUTER_ALLOW_UNKNOWN_HOST=1 \
+  ROUTER_HOST_REGISTRY_ROOT="$TEST_REGISTRY_ROOT" \
+  ROUTER_HOST_REGISTRY_ALLOW_OVERRIDE=1 \
+  ROUTER_HOST_REGISTRY_URL='http://unsupported-protocol.invalid/registry.json' \
+  "$TEST_BIN/grokbot-router" doctor >"$1" 2>&1
+}
+run_test_doctor "$TEMPORARY/doctor-healthy.log"
+grep -q '"hostAdapterVerified": true' "$TEMPORARY/doctor-healthy.log"
+cp "$TEST_RUNTIME/run-provider.mjs" "$TEMPORARY/valid-run-provider.mjs"
+printf '\nconst = broken;\n' >> "$TEST_RUNTIME/run-provider.mjs"
+if run_test_doctor "$TEMPORARY/doctor-runtime-failure.log"; then
+  echo 'Doctor must return failure for an invalid provider runner' >&2
+  exit 1
+fi
+grep -q 'FAILED' "$TEMPORARY/doctor-runtime-failure.log"
+cp "$TEMPORARY/valid-run-provider.mjs" "$TEST_RUNTIME/run-provider.mjs"
+cp "$TEST_HOST" "$TEMPORARY/valid-adapted-host"
+printf '\n// altered adapter\n' >> "$TEST_HOST"
+if run_test_doctor "$TEMPORARY/doctor-host-failure.log"; then
+  echo 'Doctor must return failure for an unverified adapter' >&2
+  exit 1
+fi
+grep -q 'GROKBOT_ROUTER_DOCTOR_DONE' "$TEMPORARY/doctor-host-failure.log"
+cp "$TEMPORARY/valid-adapted-host" "$TEST_HOST"
+run_test_doctor "$TEMPORARY/doctor-recovered.log"
+
 python3 "$TEST_RUNTIME/patch/router_patch.py" \
   --restore \
   --allow-unknown-host \
