@@ -35,7 +35,7 @@ A's model-authored identity at 08:33:57 agreed with OpenRouter Luna status. One 
 
 ## Native memory extraction failure
 
-Audit inspection confirmed A's greeting (`85fb9316bbb0b575841f6414`) at 08:32:21.340 and B's greeting (`394f8207efaf686b9ff5c5fc`) at 08:34:14.991 returned no outer tool calls. A's native parent is `1f83a769-ff6e-4abc-8bce-001677ba29dc`; B's is `1e8abc40-f77f-4f2b-8fbc-08add3a59a4c`.
+Audit inspection confirmed A's greeting (`85fb9316bbb0b575841f6414`) at 08:32:21.340 and B's greeting (`394f8207efa6f86b9ff5c5fc`) at 08:34:14.991 returned no outer tool calls. A's native parent is `1f83a769-ff6e-4abc-8bce-001677ba29dc`; B's is `1e8abc40-f77f-4f2b-8fbc-08add3a59a4c`.
 
 After the unlisted-model help response, A's audit showed a separate two-string system/user inference at 08:35:42.392 and a cached `GetDynamicTools` call by 08:35:46.704. The native chat journal had only the intended help receipt, with no extra chat message. Source inspection identified the separate host memory-extraction helper: it builds an Existing memory / Latest exchange prompt and reuses `session.getExecutor()`. The router treated this helper input as a fresh chat request, exposing cached chat tools and sharing conversation state. This is a real ancillary-task defect even though the visible control response was correct.
 

@@ -2564,7 +2564,7 @@ test("only a paired successful native background receipt after the current input
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("native memory and summary tasks preserve Bot state and never expose cached chat tools", async () => {
+test("native memory extraction preserves Bot state and never exposes cached chat tools", async () => {
   const root = await mkdtemp(join(tmpdir(), "grokrouter-native-text-"));
   const previous = process.env.OPENROUTER_API_KEY;
   process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
@@ -2580,7 +2580,7 @@ test("native memory and summary tasks preserve Bot state and never expose cached
       Object.assign(state, { threadId: "saved-chat-thread", tools: [{name:"Shell",parameters:{type:"object"}}], completedTurnFingerprint: "human-receipt", completedTurnAt: Date.now(), processedAutomationContinuationSignatures: ["child-receipt"] });
       await writeFile(pathname, JSON.stringify(state));
       const before = await readFile(pathname, "utf8");
-      for (const flags of [{ grokBotRouterTextTask: "memory-extraction" }, { isSummarizationSession: true }]) {
+      for (const flags of [{ grokBotRouterTextTask: "memory-extraction" }]) {
         const messages = [{ role: "system", content: "Extract durable memories. Return NONE when there is nothing to retain." }, { role: "user", content: "Existing memory:\n(empty)\nLatest exchange:\nUser: /provider codex\nAssistant: status shown" }];
         let called = 0;
         const deps = {
@@ -2617,7 +2617,7 @@ test("native memory and summary tasks preserve Bot state and never expose cached
         assert.equal(await readFile(pathname,"utf8"),before);
       }
       const audit = (await readFile(config.auditPath,"utf8")).trim().split("\n").map(JSON.parse);
-      assert.equal(audit.filter(x=>x.event==="native_text_task_ok").length,2);
+      assert.equal(audit.filter(x=>x.event==="native_text_task_ok").length,1);
       assert.equal(audit.filter(x=>x.event==="turn_start").length,0);
       assert.equal(audit.filter(x=>x.event==="control_turn").length,1);
     }

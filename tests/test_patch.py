@@ -174,6 +174,7 @@ async function extractMemories(args) { return args.executor; }
   assert.equal(helper.sessionOptions.botId, 'memory-bot');
   assert.equal(session.getExecutor().sessionOptions.grokBotRouterTextTask, undefined);
   assert.equal(options.grokBotRouterTextTask, undefined);
+  assert.equal(new Host().createSession(() => {}, {isSummarizationSession:true}), process.env.SAND_AGENT_MOCK_RESPONSE);
   assert.equal(getGrokBotRouterSendToolName([{name:'SendToUser'}],helper.sessionOptions), null);
   assert.equal(getGrokBotRouterSendToolName([], {isSummarizationSession:true}), null);
   const stock = {getExecutor: () => 'stock-executor'};

@@ -272,7 +272,9 @@ function createGrokBotRouterPromptExecutor(config, sessionOptions) {
 SESSION_CODE = r'''
       // GROKBOT_MODEL_ROUTER_V45: route enabled sessions through the provider adapter.
       const grokBotRouterConfig = loadGrokBotRouterConfig();
-      if (grokBotRouterConfig) {
+      // Native maintenance sessions have their own structured-text contract.
+      // Keep the host's original inference path for those sessions.
+      if (grokBotRouterConfig && sessionOptions?.isSummarizationSession !== true) {
         const provider = grokBotRouterConfig.provider === "openrouter" ? "openrouter" : "codex";
         const modelId = provider === "openrouter"
           ? grokBotRouterConfig.openRouterModel || "anthropic/claude-sonnet-4.6"

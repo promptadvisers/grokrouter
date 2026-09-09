@@ -107,3 +107,10 @@ The latest recorded complete Mac control lifecycle is beta.45; the maintenance c
 > The installer also checks the exact Grok version and saves a verified copy of the original host. So if I want to undo the whole thing, Restore Stock puts Grok's original inference path back.
 
 For the complete recording order and honest claim boundary, use [YOUTUBE-DEMO.md](YOUTUBE-DEMO.md).
+
+
+## Native memory tasks
+
+The chat executor also supplies Grok's memory-extraction helper. That exact native call receives a dedicated task marker: the selected Bot provider processes its original instructions without chat commands, cached tools, saved chat threads, or conversation/completion receipts. Results return directly to the host as text. Codex uses a separate read-only helper thread with network and web search disabled. Helper events are recorded separately from chat inference, without prompt or memory contents.
+
+Explicit native maintenance sessions (`isSummarizationSession`) retain the host's original inference implementation. Memory synthesis has a separate structured-text contract and is not routed through the chat response wrapper. This is an inference boundary, not a claim that all internal Grok work uses the selected chat provider.

@@ -32,7 +32,7 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 
 - A paired successful background launch receipt now defers final answers and delivery tools until actual completion. Other requested tools can continue; quoted, failed, and unrelated receipts do not gain authority. The native Task broker receipt, including its paragraph spacing, is covered explicitly. The guard was verified live with both providers on `351bdf7`. Revision `fdbae51` then passed both-provider native journal checks: one receipt-backed launch acknowledgement, actual child completion, one final answer, and zero ack-redrive recovery prompts. Final fresh-Bot acceptance on both supported versions remains pending.
 
-- Native memory extraction now receives a dedicated text-task marker at its exact host executor call. Memory and explicitly marked summarization tasks retain their system instructions, expose no chat tools, return text directly to the host, and do not alter saved chat threads or completion receipts. The fdbae51 live audit exposed this ancillary-task defect; corrected live acceptance remains pending.
+- Native memory extraction now receives a dedicated text-task marker at its exact host executor call. Memory extraction retains its system instructions, exposes no chat tools, returns text directly to the host, and does not alter saved chat threads or completion receipts. Explicit native maintenance sessions retain Grok's original inference backend and structured-text contract. The fdbae51 live audit exposed this ancillary-task defect; corrected live acceptance remains pending.
 
 ## Verified so far
 

@@ -2,7 +2,7 @@
 <h1 align="center">GrokRouter</h1>
 <p align="center"><strong>Choose the model for each Grok Bot.</strong><br>Use Codex SDK or OpenRouter from Grok Bot's existing chat.</p>
 
-GrokRouter is an experimental, unofficial, reversible model router. Each Bot remembers its own provider and model. Grok Bot continues to own conversations, files, the computer, permissions, and any outer tools it supplies to the routed model.
+GrokRouter is an experimental, unofficial, reversible model router. Each Bot remembers its own provider and model. Grok Bot continues to own conversations, files, the computer, permissions, and any outer tools it supplies to the routed model. Native maintenance sessions such as memory synthesis keep Grok's original inference backend.
 
 > **Maintenance candidate:** This branch prepares `0.1.0-beta.47`. It is not released or live-verified yet. The pinned command below continues to reference the published beta.46 source until the replacement tag exists. beta.46 uses structural host acceptance; this candidate restores exact reviewed hash-and-size verification and repairs unsafe backup fallback.
 
