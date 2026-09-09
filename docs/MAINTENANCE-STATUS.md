@@ -34,6 +34,8 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 
 - Native memory extraction now receives a dedicated text-task marker at its exact host executor call. Memory extraction retains its system instructions, exposes no chat tools, returns text directly to the host, and does not alter saved chat threads or completion receipts. Explicit native maintenance sessions retain Grok's original inference backend and structured-text contract. The fdbae51 live audit exposed this ancillary-task defect; corrected live acceptance remains pending.
 
+- Standalone literal replies normalize a complete printed SendToUser wrapper only when its text exactly matches the requested literal. The wrapper is decoded as text and never executed; unoffered native calls on literal/greeting turns are rejected. This repairs the final 65254d4 OpenRouter Luna probe.
+
 ## Verified so far
 
 - The automated runtime, patcher, installer/payload, Windows-contract, and release/compatibility suites pass locally.

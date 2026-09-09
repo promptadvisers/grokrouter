@@ -1184,6 +1184,24 @@ function isLiteralTextOnlyRequest(text) {
   return /^(?:please\s+)?(?:reply|respond|answer)\s+with\s+exactly\s+(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`|[^\s]+)(?:\s+and\s+nothing\s+else)?[.!]?\s*$/i.test(text.trim());
 }
 
+function unwrapLiteralDeliveryText(text, request) {
+  const literal = request.trim().match(/^(?:please\s+)?(?:reply|respond|answer)\s+with\s+exactly\s+("[^"\n]+"|'[^'\n]+'|`[^`\n]+`|[^\s]+)(?:\s+and\s+nothing\s+else)?[.!]?\s*$/i)?.[1];
+  if (!literal) return text;
+  const expected = /^["'`]/.test(literal) ? literal.slice(1, -1) : literal;
+  // Decode only a complete delivery envelope containing the exact requested
+  // literal. This is plain-text normalization, never an executable tool call.
+  const marker = text.match(/^\s*(?:```[^\n]*\n)?to=functions\.SendToUser\b[^{}]{0,320}(?=\{)/i);
+  if (!marker) return text;
+  const json = balancedJsonObject(text, marker[0].length);
+  if (!json || !/^\s*(?:```)?\s*$/.test(text.slice(marker[0].length + json.length))) return text;
+  try {
+    const value = JSON.parse(json);
+    if (value?.type === "text" && value.content === expected
+        && Object.keys(value).every(key => ["type", "content"].includes(key))) return expected;
+  } catch {}
+  return text;
+}
+
 export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) {
   const apiKey = await persistedOpenRouterKey(config);
   const model = config.openRouterModel || "anthropic/claude-sonnet-4.6";
@@ -1269,12 +1287,13 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
     }
     const message = payload?.choices?.[0]?.message;
     if (!message) throw new Error("OpenRouter returned no completion choice");
-    const text = typeof message.content === "string"
+    const rawText = typeof message.content === "string"
       ? message.content.trim()
       : Array.isArray(message.content)
         ? message.content.map((part) => part?.text ?? "").filter(Boolean).join("\n").trim()
         : "";
-    const nativeToolCalls = config.nativeTextTask ? [] : parsedOpenRouterToolCalls(message.tool_calls ?? message.toolCalls);
+    const text = directTextOnly && !config.nativeTextTask ? unwrapLiteralDeliveryText(rawText, visibleUserText) : rawText;
+    const nativeToolCalls = config.nativeTextTask || directTextOnly || automaticGreeting ? [] : parsedOpenRouterToolCalls(message.tool_calls ?? message.toolCalls);
     const recoveredToolCalls = nativeToolCalls.length
       ? []
       : recoveredTextualOpenRouterToolCalls(text, offeredTools, visibleUserText);
@@ -1286,6 +1305,7 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
       text: recoveredToolCalls.length ? "" : text,
       toolCalls: nativeToolCalls.length ? nativeToolCalls : recoveredToolCalls,
       recoveredTextualToolCall: recoveredToolCalls.length > 0,
+      normalizedLiteralDelivery: text !== rawText,
       ...(requiresTool ? {
         textualToolDiagnostics: {
           requestedTool: forcedTool?.function?.name || null,
@@ -1324,6 +1344,7 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
     emptyResponse: !completion.text && !completion.toolCalls.length,
     retriedEmpty,
     recoveredTextualToolCall: completion.recoveredTextualToolCall,
+    normalizedLiteralDelivery: completion.normalizedLiteralDelivery,
     textualToolDiagnostics: completion.textualToolDiagnostics,
   };
 }
@@ -2498,6 +2519,7 @@ export async function runTurn(input, dependencies = {}) {
     ...(result.emptyRecovery ? { emptyRecovery: result.emptyRecovery } : {}),
     ...(result.retriedEmpty ? { retriedEmpty: true } : {}),
     ...(result.recoveredTextualToolCall ? { recoveredTextualToolCall: true } : {}),
+    ...(result.normalizedLiteralDelivery ? { normalizedLiteralDelivery: true } : {}),
     ...(result.textualToolDiagnostics ? { textualToolDiagnostics: result.textualToolDiagnostics } : {}),
   });
   const {
@@ -2505,6 +2527,7 @@ export async function runTurn(input, dependencies = {}) {
     retriedEmpty: _retriedEmpty,
     emptyRecovery: _emptyRecovery,
     recoveredTextualToolCall: _recoveredTextualToolCall,
+    normalizedLiteralDelivery: _normalizedLiteralDelivery,
     textualToolDiagnostics: _textualToolDiagnostics,
     ...publicResult
   } = result;

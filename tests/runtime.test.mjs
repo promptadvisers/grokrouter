@@ -2650,3 +2650,38 @@ test("empty native text-task recovery retains the original task and rejects tool
     } finally {if(previous===undefined)delete process.env.OPENROUTER_API_KEY;else process.env.OPENROUTER_API_KEY=previous;}
   }
 });
+
+test("literal replies unwrap only an exact matching final delivery envelope without executing it", async () => {
+  const previous=process.env.OPENROUTER_API_KEY;process.env.OPENROUTER_API_KEY=TEST_OPENROUTER_KEY;
+  const marker="to=functions.SendToUser  code\u5927\u5c0f\u89c4\u5f8b\n";
+  const json=JSON.stringify({type:"text",content:"FRESH_BOT_TEXT_OK"});
+  const cases=[
+    [marker+json,"FRESH_BOT_TEXT_OK",true],
+    ["```text\n"+marker+json+"\n```","FRESH_BOT_TEXT_OK",true],
+    [marker+json.replace("FRESH_BOT_TEXT_OK","OTHER"),null,false],
+    [marker+JSON.stringify({type:"text",content:"FRESH_BOT_TEXT_OK",recipient:"elsewhere"}),null,false],
+    [marker.replace("SendToUser","Shell")+json,null,false],
+    ["Example: "+marker+json,null,false],
+    [marker+json+" Extra prose",null,false],
+    [marker+json+marker+json,null,false],
+  ];
+  try {
+    for(const [content,expected,normalized] of cases) {
+      const result=await runOpenRouter({},[user("Reply with exactly FRESH_BOT_TEXT_OK and nothing else.")],[{name:"GetDynamicTools",parameters:{type:"object"}}],async(_,options)=>{
+        const body=JSON.parse(options.body);assert.equal(body.tools,undefined);
+        return new Response(JSON.stringify({choices:[{message:{content,tool_calls:[{id:"unoffered",function:{name:"Shell",arguments:"{}"}}]}}]}),{status:200});
+      });
+      assert.equal(result.text,expected??content);
+      assert.deepEqual(result.toolCalls,[]);
+      assert.equal(result.normalizedLiteralDelivery,normalized);
+    }
+    const quoted=await runOpenRouter({},[user('Reply with exactly "hello world" and nothing else.')],[],async()=>new Response(JSON.stringify({choices:[{message:{content:marker+JSON.stringify({type:"text",content:"hello world"})}}]}),{status:200}));
+    assert.equal(quoted.text,"hello world");assert.deepEqual(quoted.toolCalls,[]);
+    let calls=0;
+    const retry=await runOpenRouter({},[user("Reply with exactly FRESH_BOT_TEXT_OK and nothing else.")],[],async()=>{
+      calls++;
+      return new Response(JSON.stringify({choices:[{message:calls===1?{content:"",tool_calls:[{id:"bad",function:{name:"Shell",arguments:"{}"}}]}:{content:"FRESH_BOT_TEXT_OK"}}]}),{status:200});
+    });
+    assert.equal(calls,2);assert.equal(retry.text,"FRESH_BOT_TEXT_OK");assert.deepEqual(retry.toolCalls,[]);
+  } finally {if(previous===undefined)delete process.env.OPENROUTER_API_KEY;else process.env.OPENROUTER_API_KEY=previous;}
+});
