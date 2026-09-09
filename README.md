@@ -4,28 +4,28 @@
 
 GrokRouter is an experimental, unofficial, reversible model router. Each Bot remembers its own provider and model. Grok Bot continues to own conversations, files, the computer, permissions, and any outer tools it supplies to the routed model. Native maintenance sessions such as memory synthesis keep Grok's original inference backend.
 
-> **Maintenance candidate:** This branch prepares `0.1.0-beta.47`. It has passed the complete live acceptance procedure on official Grok Bot 0.30.0 and 0.36.0 and is awaiting publication. The pinned command below continues to reference the published beta.46 source until the replacement tag exists. beta.46 uses structural host acceptance; this candidate restores exact reviewed hash-and-size verification and repairs unsafe backup fallback.
+> **Source prerelease: beta.47.** Verified on official Grok Bot 0.30.0 and 0.36.0 with exact reviewed host fingerprints. [Release notes and source](https://github.com/promptadvisers/grokrouter/releases/tag/source-v0.1.0-beta.47) · [Dated verification](docs/TEST-MATRIX.md).
 
 ## Compatibility
 
 | Component | Current boundary |
 | --- | --- |
-| Grok Bot desktop | Published beta.46: **0.30.0**. Candidate beta.47: exact **0.30.0 and 0.36.0** gates, with separate complete live acceptance |
+| Grok Bot desktop | Exact official **0.30.0 and 0.36.0**, each independently live-verified |
 | macOS | Apple silicon, macOS 12+, Apple Command Line Tools |
 | Windows x64 / Arm64 | Source preview; CI packaging is separate from native installation verification |
 | Codex SDK | Sign in with your existing Codex account in the Bot computer |
 | OpenRouter | Your OpenRouter API key; provider usage is billed by OpenRouter |
 | Computer and sub-agents | Available only when Grok offers the necessary schemas; see the [verification matrix](docs/TEST-MATRIX.md) for provider-specific evidence |
 
-**Already updated Grok Bot?** The published beta.46 installer cannot support 0.36.0. This candidate adds a separately verified 0.36.0 desktop gate and signed host registry; it has passed the exact-artifact live acceptance gates. Other versions remain unsupported. Reports are tracked in [#1](https://github.com/promptadvisers/grokrouter/issues/1) and [#7](https://github.com/promptadvisers/grokrouter/issues/7). A successful source build does not establish compatibility with a newer Grok app or cloud host.
+**Already updated Grok Bot?** Beta.47 supports official 0.36.0 through a separate desktop gate and signed host registry. **0.44.0 and other unlisted versions are unsupported.** The desktop version and cloud host are separate checks: a supported app can still receive an unknown host, which the installer leaves untouched. See [compatibility reports](https://github.com/promptadvisers/grokrouter/issues?q=is%3Aissue+is%3Aopen+label%3Acompatibility).
 
 ## Install on a Mac
 
-1. Open the official Grok Bot **0.30.0** app from `/Applications`. Select a Bot, open its **Computer**, and leave it visible.
-2. Run the published source installer in your **Mac's Terminal**:
+1. Open the official Grok Bot **0.30.0 or 0.36.0** app from `/Applications`. Select a Bot, open its **Computer**, and leave it visible.
+2. Run the beta.47 source installer in your **Mac's Terminal**:
 
    ```bash
-   /usr/bin/curl --fail --silent --show-error --location https://raw.githubusercontent.com/promptadvisers/grokrouter/source-v0.1.0-beta.46/scripts/install-macos.sh --output /tmp/grokrouter-install.sh && /bin/bash /tmp/grokrouter-install.sh
+   /usr/bin/curl --fail --silent --show-error --location https://raw.githubusercontent.com/promptadvisers/grokrouter/source-v0.1.0-beta.47/scripts/install-macos.sh --output /tmp/grokrouter-install.sh && /bin/bash /tmp/grokrouter-install.sh
    ```
 
    This downloads tagged source, builds and signs the app locally, installs it at `~/Applications/GrokRouter.app`, and opens it. It does not need `sudo`. If Apple Command Line Tools are missing, finish Apple's installation and repeat the command.
@@ -42,7 +42,7 @@ GrokRouter is an experimental, unofficial, reversible model router. Each Bot rem
 
 The slash-suggestion menu is a convenience. If an entry is missing, type the complete command manually; a menu entry alone does not prove routing works.
 
-The ZIP alternative is **Code → Download ZIP → Install GrokRouter.command**. A ZIP from a development branch contains that branch's candidate, so use the tagged source for a published version. If macOS asks whether to open the command, Control-click it and choose **Open**. Do not disable Gatekeeper.
+The ZIP alternative is the release's **Source code (zip) → Install GrokRouter.command**. A ZIP from a development branch contains that branch's candidate, so use the tagged source for this prerelease. If macOS asks whether to open the command, Control-click it and choose **Open**. Do not disable Gatekeeper.
 
 ## Choose a model in chat
 
@@ -69,7 +69,7 @@ Use the **GrokRouter desktop app** for installation, health checks, repair, and 
 | Symptom | Next step |
 | --- | --- |
 | Unsupported app version | Stop and check the compatibility table. Reinstalling the same router cannot add version support. |
-| Unknown host hash or wrong byte count | Copy safe diagnostics. The candidate leaves the live host untouched, even if an old backup exists. A maintainer must review an exact host entry. |
+| Unknown host hash or wrong byte count | Copy safe diagnostics. The installer leaves the live host untouched, even if an old backup exists. A maintainer must review an exact host entry. |
 | Prior OpenGrok or another router | Do not layer routers. Use that router's documented removal or explicit verified stock restoration before attempting GrokRouter installation. |
 | Runtime version looks correct but adapter is stock or unknown | Runtime files and the live adapter are separate. Run desktop **Check health**. Repair succeeds only for a reviewed stock host or an exactly reconstructed supported router upgrade. |
 | Modified router with a valid stock backup | Automatic repair refuses it. Use explicit **Restore stock** if you intend to replace the live host, then install again on a supported version. |
@@ -85,11 +85,11 @@ For [installation support](https://github.com/promptadvisers/grokrouter/issues/n
 
 ## What verification means
 
-The candidate requires an exact reviewed **SHA-256 and byte count**, then checks every source anchor and syntax-checks the transformed file. Entries come from the bundled manifest or an Ed25519-signed compatibility registry. Structural similarity and a successful syntax check are diagnostic evidence; they do not authenticate an unknown file as stock vendor code.
+GrokRouter requires an exact reviewed **SHA-256 and byte count**, then checks every source anchor and syntax-checks the transformed file. Entries come from the bundled manifest or an Ed25519-signed compatibility registry. Structural similarity and a successful syntax check are diagnostic evidence; they do not authenticate an unknown file as stock vendor code.
 
 Router upgrades reconstruct the expected existing adapter from a trusted original. A marker string alone is insufficient. Doctor verifies the live adapter against that reconstruction and reports stock-backup health separately.
 
-The selected model can request only the outer tools Grok supplies for that turn. Grok still applies its permissions and performs those actions. A screenshot or sub-agent bridge in the source is not proof that every provider has passed those workflows. Historical and current results are kept in [TEST-MATRIX.md](docs/TEST-MATRIX.md).
+The selected model can request only the outer tools Grok supplies for that turn. Grok still applies its permissions and performs those actions. A screenshot or sub-agent bridge in the source is not proof that every provider has passed those workflows. Codex Sol and OpenRouter Claude passed real Shell, Read, Screenshot, and completed-child tests on both supported versions. Other models do not inherit those results. Exact receipts and provider limitations are in [TEST-MATRIX.md](docs/TEST-MATRIX.md).
 
 Provider credentials stay out of repository files, Bot state, and diagnostic logs. Routed conversation content is sent to the provider you choose. Read [SECURITY.md](SECURITY.md) and [HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) for the data boundary.
 

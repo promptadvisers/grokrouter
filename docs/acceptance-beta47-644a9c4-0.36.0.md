@@ -57,3 +57,12 @@ The addressed model switch returned at 10:14:46. B subsequently returned one pla
 One ancillary Codex memory-extraction task returned empty after its one allowed recovery at 10:14:40.388, producing a redacted helper error and host bridge diagnostic. The visible group command remained correct; no error bubble or state leak appeared. The next memory extraction completed at 10:14:52.781, episode summary at 10:14:59.244, and further memory tasks at 10:15:08.529 and 10:15:26.402, all without tools. This is recorded as a provider-empty limitation affecting that background memory pass, not omitted or represented as an error-free run. The required user-facing and routing gates passed.
 
 The clean-source installation listed above ran against official 0.36.0. All seven required gates are now verified for this exact candidate on 0.36.0. The immutable artifact must still complete the full independent 0.30.0 matrix before publication.
+
+
+## Final local restoration and Repair verification
+
+After the independent 0.30.0 acceptance, the same router explicitly restored the reviewed stock host again (`ok: true`, `status: restored`, stock hash `3364e421402302f8264f961637addb3997a817fde84a91b19635a0c28ff3941f`, `GROKBOT_ROUTER_UNINSTALL_OK`). Quitting applied Grok's queued 0.44.0 update; that application was preserved under its actual version. The official mounted 0.36.0 application was copied back only after vendor-signature and exact-version verification.
+
+The unchanged accepted beta.47 artifact then installed successfully on official 0.36.0 and registered six unique commands for 43 Bots/channels before host restart. Its explicit **Repair** action also succeeded and reconciled those six commands before restart. The following desktop Doctor's actual terminal receipt reported `hostAdapterVerified: true`, `stockBackupVerified: true`, `ok: true`, `status: installed`, supported version `0.36.0`, and `GROKBOT_ROUTER_DOCTOR_DONE`. Existing Codex sign-in and the protected OpenRouter credential remained configured. RC A036's Provider receipt at 11:04:43 UTC retained its prior OpenRouter Luna/medium selection.
+
+This verifies issue #7's official 0.36.0 Repair blocker on the exact reviewed host; it does not assert reporter confirmation or support for another host fingerprint. The accepted local installer was placed at `~/Applications/GrokRouter.app`, with the prior beta.45 app preserved in `~/Applications/GrokRouter Backups/`. The original source checkout and its unrelated edits remain untouched.
