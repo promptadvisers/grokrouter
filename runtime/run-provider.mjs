@@ -42,6 +42,16 @@ export function messageRole(message) {
   return typeof role === "string" ? role.toLowerCase() : "";
 }
 
+function hiddenCompletionContent(message) {
+  const content = message?.content ?? message?.message?.content ?? message?.data?.content;
+  const raw = collectText(content);
+  // The native host adds a timestamp and optional message-ID part, then wraps
+  // the actual hidden payload in user_query just like an ordinary user turn.
+  const queries = [...raw.matchAll(/<user_query>([\s\S]*?)<\/user_query>/gi)];
+  const text = (queries.length === 1 ? queries[0][1] : queries.length ? "" : raw).trim();
+  return /^\[SAND_HIDDEN_PROMPT\]/.test(text) ? text : "";
+}
+
 export function automationCompletionId(message) {
   const candidates = [
     message?.providerOptions?.cursor,
@@ -56,13 +66,8 @@ export function automationCompletionId(message) {
   // automation inbox. The reviewed host preserves that run's requestId on the
   // user message. Match its exact envelope and deduplicate by that durable ID;
   // equal child output from another request remains a distinct completion.
-  const content = message?.content ?? message?.message?.content ?? message?.data?.content;
-  const nativeMarker = messageRole(message) === "user" && collectText(content).match(
-    /^\s*\[SAND_HIDDEN_PROMPT\]\s*\[GROKBOT_ROUTER_CHILD_COMPLETION:([a-f0-9]{64})\]\s*\[A background task just completed\](?:\s|$)/,
-  );
-  if (nativeMarker) return `grok-child-dispatch:${nativeMarker[1]}`;
   if (messageRole(message) === "user"
-    && /^\s*\[SAND_HIDDEN_PROMPT\]\s*\[A background task just completed\](?:\s|$)/.test(collectText(content))) {
+    && /^\[SAND_HIDDEN_PROMPT\]\s*\[A background task just completed\](?:\s|$)/.test(hiddenCompletionContent(message))) {
     for (const cursor of candidates) {
       const id = cursor?.requestId;
       if (typeof id === "string" && id.trim()) return `grok-child-request:${id.trim()}`;
@@ -74,9 +79,8 @@ export function automationCompletionId(message) {
 export function automationCompletionText(message) {
   if (!automationCompletionId(message)) return "";
   const content = message?.content ?? message?.message?.content ?? message?.data?.content;
-  const text = collectText(content)
+  const text = (hiddenCompletionContent(message) || collectText(content))
     .replace(/^\s*\[SAND_HIDDEN_PROMPT\]\s*/i, "")
-    .replace(/^\[GROKBOT_ROUTER_CHILD_COMPLETION:[a-f0-9]{64}\]\s*/, "")
     .trim();
   return text || "Background task completed with no text output.";
 }

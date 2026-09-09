@@ -1,9 +1,6 @@
 class MockPromptExecutor {
   constructor(factory, messages) {}
 }
-function buildSubagentRevivalPrompt(completions) {
-  return "[A background task just completed] " + completions.map(item => item.result).join("\n");
-}
 function createMockPromptExecutor(options2) {
   return new MockPromptExecutor(() => options2(), void 0);
 }

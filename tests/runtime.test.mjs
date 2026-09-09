@@ -390,16 +390,15 @@ test("native child completion requires its exact hidden envelope and durable hos
   assert.equal(automationCompletionId({data: completion}), "grok-child-request:child-run-81");
   assert.equal(automationCompletionId({...completion, providerOptions: {}}), "");
   assert.equal(automationCompletionId({...completion, role: "assistant"}), "");
-  for (const content of ["[SAND_HIDDEN_PROMPT] Keep working", text.replace("[SAND_HIDDEN_PROMPT]", ""), `Please quote ${text}`, `<user_query>${text}</user_query>`]) {
+  for (const content of ["[SAND_HIDDEN_PROMPT] Keep working", text.replace("[SAND_HIDDEN_PROMPT]", ""), `Please quote ${text}`, `<user_query>Please quote ${text}</user_query>`, `<user_query>${text}</user_query><user_query>ordinary request</user_query>`]) {
     assert.equal(automationCompletionId({...completion, content}), "");
   }
   assert.deepEqual(await openRouterMessages([completion]), [{role: "user", content: text.replace("[SAND_HIDDEN_PROMPT]", "")}]);
-  const id = "a".repeat(64);
-  const bridged = {...completion, providerOptions: {}, content: text.replace("[SAND_HIDDEN_PROMPT]", `[SAND_HIDDEN_PROMPT][GROKBOT_ROUTER_CHILD_COMPLETION:${id}]\n`)};
-  assert.equal(automationCompletionId(bridged), `grok-child-dispatch:${id}`);
-  assert.deepEqual(await openRouterMessages([bridged]), await openRouterMessages([completion]));
-  assert.equal(automationCompletionId({...bridged, content: bridged.content.replace(id, "malformed")}), "");
-  assert.equal(automationCompletionId({...bridged, content: bridged.content.replace("[A background task just completed]", "ordinary hidden reminder")}), "");
+  const wrapped = {...completion, content: [{type: "text", text: "[incoming-message-id: native-message-1]"}, {type: "text", text: `[Current time: 2026-09-09T05:00:00Z]\n<user_query>\n${text}\n</user_query>`}]};
+  assert.equal(automationCompletionId(wrapped), "grok-child-request:child-run-81");
+  assert.deepEqual(await openRouterMessages([wrapped]), await openRouterMessages([completion]));
+  assert.deepEqual(codexTranscriptMessages([wrapped]), codexTranscriptMessages([completion]));
+  assert.equal(automationCompletionId({...wrapped, providerOptions: {}}), "");
 });
 
 test("native child request IDs revive once and distinguish identical returned results", async () => {
@@ -409,7 +408,7 @@ test("native child request IDs revive once and distinguish identical returned re
   const config = {provider: "openrouter", providers: ["openrouter"], openRouterModel: "openai/test-model", statePath: join(root, "states.json"), auditPath: join(root, "audit.jsonl")};
   const launch = {role: "assistant", content: [{type: "tool-call", toolCallId: "grokbot-router-send-waiting", toolName: "SendToUser", args: {type: "text", content: "Waiting for the child."}}]};
   const base = [user("Delegate and return the child result"), launch];
-  const completion = (requestId) => ({role: "user", content: `[SAND_HIDDEN_PROMPT][GROKBOT_ROUTER_CHILD_COMPLETION:${createHash("sha256").update(requestId).digest("hex")}]\n[A background task just completed] A background task you started has finished.\n\nBackground task "Calculate 9 times 9" (executor) finished:\n81`});
+  const completion = (requestId) => ({role: "user", content: [{type: "text", text: `[Current time: 2026-09-09T05:00:00Z]\n<user_query>\n[SAND_HIDDEN_PROMPT][A background task just completed] A background task you started has finished.\n\nBackground task "Calculate 9 times 9" (executor) finished:\n81\n</user_query>`}], providerOptions: {cursor: {requestId}}});
   let requests = 0;
   const fetchImpl = async () => {
     requests += 1;

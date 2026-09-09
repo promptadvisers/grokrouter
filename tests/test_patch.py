@@ -20,9 +20,6 @@ STOCK_SOURCE = """\
 class MockPromptExecutor {
   constructor(factory, messages) {}
 }
-function buildSubagentRevivalPrompt(completions) {
-  return "[A background task just completed] " + completions.map(item => item.result).join("\\n");
-}
 function createMockPromptExecutor(options2) {
   return new MockPromptExecutor(() => options2(), void 0);
 }
@@ -180,29 +177,6 @@ class MockPromptExecutor {
 '''
         result = subprocess.run(["node", "-"], input=script, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_native_child_formatter_preserves_dispatch_identity_without_hashing_output(self):
-        script = router_patch.patch_text(STOCK_SOURCE) + r'''
-const assert = require("node:assert/strict");
-loadGrokBotRouterConfig = () => ({enabled:true});
-const first = {subagentAgentId:"child-1",toolCallId:"grokbot-router-tool-launch-1",result:"64"};
-const second = {subagentAgentId:"child-1",toolCallId:"grokbot-router-tool-launch-2",result:"64"};
-const marker = (value) => value.match(/^\[GROKBOT_ROUTER_CHILD_COMPLETION:([a-f0-9]{64})\]/)?.[1];
-const text = buildSubagentRevivalPrompt([first]);
-assert.ok(marker(text));
-assert.ok(text.endsWith(buildGrokBotRouterNativeRevivalPrompt([first])));
-assert.equal(marker(text),marker(buildSubagentRevivalPrompt([{...first,result:"different text"}])));
-assert.notEqual(marker(text),marker(buildSubagentRevivalPrompt([second])));
-assert.equal(marker(buildSubagentRevivalPrompt([first,second])),marker(buildSubagentRevivalPrompt([second,first])));
-assert.equal(marker(buildSubagentRevivalPrompt([{...first,toolCallId:""}])),undefined);
-assert.ok(marker(buildSubagentRevivalPrompt([{...first,toolCallId:"",subagentRequestId:"native-request-1"}])));
-loadGrokBotRouterConfig = () => null;
-assert.equal(buildSubagentRevivalPrompt([first]),buildGrokBotRouterNativeRevivalPrompt([first]));
-'''
-        result = subprocess.run(["node", "-"], input=script, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        with self.assertRaisesRegex(router_patch.PatchError, "completion formatter anchor"):
-            router_patch.patch_text(STOCK_SOURCE.replace("function buildSubagentRevivalPrompt", "function missingRevival"))
 
     def test_unknown_host_is_rejected_without_development_override(self):
         self.host.write_text(STOCK_SOURCE + "// changed\n")
