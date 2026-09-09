@@ -1,7 +1,7 @@
 {
   "version": "0.1.0-beta.47",
   "status": "pending",
-  "sourceDigest": "f23c7f7c56f9f7f0c723c19dd04d440a7409c294efbe5d998642c830ff2f99b6",
+  "sourceDigest": "989dd6bb785ac65943de07e9eca9ad9f63975a87510822c32e997747232c7ec7",
   "supportedGrokVersions": [
     "0.30.0",
     "0.36.0"

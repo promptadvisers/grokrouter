@@ -2504,12 +2504,17 @@ test("running child receipts cannot deliver inferred results and actual completi
         };
         const input = { config, messages: receiptMessages, sessionOptions: { botId }, tools: [{ name: "Shell", inputSchema: { type: "object" } }] };
         const pending = await runTurn(input, deps);
-        assert.equal(pending.text, "", botId);
         if (delivery === "mixed") {
+          assert.equal(pending.text, "", botId);
           assert.deepEqual(pending.toolCalls.map(c => c.toolName), ["Shell"]);
         } else {
-          assert.equal(pending.alreadyDelivered, true, botId);
+          assert.equal(pending.text, "Sub-agent started. I’ll wait for its actual result.", botId);
           assert.deepEqual(pending.toolCalls, [], botId);
+          const launchReplay = await runTurn(input, {
+            fetchImpl: () => { throw new Error("acknowledged launch was inferred again"); },
+            codexFactory: () => { throw new Error("acknowledged launch was inferred again"); },
+          });
+          assert.equal(launchReplay.alreadyDelivered, true, botId);
         }
         completed = true;
         const completion = { role: "user", content: [{ type: "text", text: "[SAND_HIDDEN_PROMPT][A background task just completed] Child finished: 56" }], providerOptions: { cursor: { requestId: `completed-${botId}` } } };

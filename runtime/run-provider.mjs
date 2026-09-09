@@ -2401,6 +2401,14 @@ export async function runTurn(input, dependencies = {}) {
     if (result.text || remainingCalls.length !== (result.toolCalls || []).length || !remainingCalls.length) {
       result = { ...result, text: "", toolCalls: remainingCalls };
       waitingForBackground = !remainingCalls.length;
+      if (waitingForBackground) {
+        // Grok requires an acknowledgement for the originating user request.
+        // Silence causes its ack-redrive recovery to retry that request even
+        // after a separate child-completion request has delivered the result.
+        // This fixed acknowledgement is justified by the paired launch receipt;
+        // it never forwards the provider's unverified result or delivery call.
+        result.text = "Sub-agent started. I’ll wait for its actual result.";
+      }
       if (!waitingForBackground) await suppressed("background-delivery-deferred-while-tools-continue");
     }
   }
@@ -2438,7 +2446,7 @@ export async function runTurn(input, dependencies = {}) {
     Object.assign(state, updated);
   }
   if (waitingForBackground) {
-    return { ...await suppressed("background-task-awaiting-completion"), usage: result.usage };
+    await suppressed("background-task-awaiting-completion");
   }
   await recordToolLinks(config, key, result.toolCalls);
   await appendAudit(config, {
