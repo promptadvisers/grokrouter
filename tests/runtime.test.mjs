@@ -1044,6 +1044,32 @@ test("a new Bot automatic greeting cannot wander into dynamic tools", async () =
   }
 });
 
+test("Codex greetings cannot dispatch dynamic tools, including malformed output and empty recovery", async () => {
+  const tools = [{ name: "GetDynamicTools", inputSchema: { type: "object" } }];
+  for (const emptyFirst of [false, true]) {
+    const calls = [];
+    const result = await runCodex({}, [{ role: "system", content: "Greet the user in their new Bot." }], tools, () => ({
+      startThread: () => ({
+        id: "greeting-thread",
+        async run(input, options) {
+          calls.push({ input, options });
+          return { finalResponse: emptyFirst && calls.length === 1 ? "" : JSON.stringify({
+            text: "I will discover tools first.",
+            toolCalls: [{ toolCallId: "bad-greeting-call", toolName: "GetDynamicTools", argumentsJson: "{}" }],
+          }) };
+        },
+      }),
+    }));
+    assert.equal(calls.length, emptyFirst ? 2 : 1);
+    assert.match(calls[0].input, /automatic new-Bot greeting/);
+    assert.match(calls[0].input, /Outer Grok tool schemas \(0\)/);
+    assert.doesNotMatch(calls[0].input, /GetDynamicTools/);
+    for (const call of calls) assert.equal(call.options.outputSchema.properties.toolCalls.maxItems, 0);
+    assert.deepEqual(result.toolCalls, []);
+    assert.equal(result.text, "Ready. What would you like me to work on?");
+  }
+});
+
 test("OpenRouter reports an invalid key stored in Grok Secrets", async () => {
   const previous = process.env.OPENROUTER_API_KEY;
   delete process.env.OPENROUTER_API_KEY;

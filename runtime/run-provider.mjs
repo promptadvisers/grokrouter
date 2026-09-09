@@ -1324,7 +1324,7 @@ async function codexImages(messages, config) {
   return paths;
 }
 
-function codexOutputSchema() {
+function codexOutputSchema(allowTools = true) {
   return {
     type: "object",
     additionalProperties: false,
@@ -1333,7 +1333,7 @@ function codexOutputSchema() {
       text: { type: "string" },
       toolCalls: {
         type: "array",
-        maxItems: 4,
+        maxItems: allowTools ? 4 : 0,
         items: {
           type: "object",
           additionalProperties: false,
@@ -1351,6 +1351,9 @@ function codexOutputSchema() {
 
 function codexPrompt(config, messages, tools, resuming) {
   const normalized = normalizeTools(tools);
+  const greeting = !latestUserText(messages)
+    && !latestAutomationCompletion(messages)
+    && toolResultCallIds(messages).size === 0;
   const preparedMessages = codexTranscriptMessages(messages);
   const transcript = sanitizedTranscript(resuming ? preparedMessages.slice(-20) : preparedMessages);
   return [
@@ -1359,7 +1362,9 @@ function codexPrompt(config, messages, tools, resuming) {
     "The in-chat commands /provider, /models, /model, /reasoning, and /router are real and are handled before model inference.",
     "If asked which provider or model is active, use these router facts. Never deny or invent router commands.",
     "Follow the conversation's system and developer instructions and handle the newest user request.",
-    "Use Codex's native shell, file editing, and web tools for work inside /workspace.",
+    greeting
+      ? "This is Grok Bot's automatic new-Bot greeting. Return one short friendly greeting directly and do not use tools, including native Codex tools."
+      : "Use Codex's native shell, file editing, and web tools for work inside /workspace.",
     "The outer Grok Bot application also exposes the tools listed below.",
     "To use an outer tool, return it in toolCalls. The outer host will execute it and resume this thread with the result.",
     "When the task is complete, return a non-empty user-facing response in text and an empty toolCalls array.",
@@ -1430,12 +1435,17 @@ export async function runCodex(config, messages, tools, codexFactory = null) {
   // remote npm download at all.
   const codex = codexFactory ? codexFactory() : await createCodexClient(config);
   const options = codexThreadOptions(config);
+  const greeting = !latestUserText(messages)
+    && !latestAutomationCompletion(messages)
+    && toolResultCallIds(messages).size === 0;
+  const offeredTools = greeting ? [] : tools;
+  const outputSchema = codexOutputSchema(!greeting);
   let resuming = Boolean(config.codexThreadId);
   let thread = resuming
     ? codex.resumeThread(config.codexThreadId, options)
     : codex.startThread(options);
   const makeInput = async () => {
-    const prompt = codexPrompt(config, messages, tools, resuming);
+    const prompt = codexPrompt(config, messages, offeredTools, resuming);
     const images = await codexImages(messages, config);
     return images.length
       ? [{ type: "text", text: prompt }, ...images.map((path) => ({ type: "local_image", path }))]
@@ -1443,24 +1453,34 @@ export async function runCodex(config, messages, tools, codexFactory = null) {
   };
   let turn;
   try {
-    turn = await thread.run(await makeInput(), { outputSchema: codexOutputSchema() });
+    turn = await thread.run(await makeInput(), { outputSchema });
   } catch (error) {
     if (!resuming) throw error;
     resuming = false;
     thread = codex.startThread(options);
-    turn = await thread.run(await makeInput(), { outputSchema: codexOutputSchema() });
+    turn = await thread.run(await makeInput(), { outputSchema });
   }
   let parsed = parseCodexResult(turn.finalResponse);
+  // The schema forbids greeting tools. Keep that boundary even if a provider
+  // returns a malformed structured result instead of honoring maxItems.
+  if (greeting && parsed.toolCalls.length) {
+    parsed = { text: "Ready. What would you like me to work on?", toolCalls: [] };
+  }
   let usage = normalizeUsage(turn.usage);
   let retriedEmpty = false;
   if (!parsed.text && !parsed.toolCalls.length) {
     retriedEmpty = true;
     // Stay on the same thread so completed native actions are not replayed.
     turn = await thread.run(
-      "Your previous turn returned no answer or outer tool call. Continue from the actual results already in this thread. Do not repeat completed actions or claim a child launched without its real result. Return the required structured object with either the next necessary outer tool call or a non-empty final text answer.",
-      { outputSchema: codexOutputSchema() },
+      greeting
+        ? "Return one short friendly greeting in text with an empty toolCalls array. Do not use any tools."
+        : "Your previous turn returned no answer or outer tool call. Continue from the actual results already in this thread. Do not repeat completed actions or claim a child launched without its real result. Return the required structured object with either the next necessary outer tool call or a non-empty final text answer.",
+      { outputSchema },
     );
     parsed = parseCodexResult(turn.finalResponse);
+    if (greeting && parsed.toolCalls.length) {
+      parsed = { text: "Ready. What would you like me to work on?", toolCalls: [] };
+    }
     const retriedUsage = normalizeUsage(turn.usage);
     usage = Object.fromEntries(Object.entries(usage).map(([key, value]) => [key, value + retriedUsage[key]]));
   }
