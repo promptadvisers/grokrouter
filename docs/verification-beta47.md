@@ -162,3 +162,9 @@ Literal-delivery revision `d942423` has source digest `a10fdaa04f8a9ac5d75329024
 
 
 Revision d942423 installed on official 0.36.0 and registered all six commands for 37 Bots/channels. The repeated literal request at 09:33:26 returned one printed `CallDynamicTool` wrapper at 09:33:31, with namespace `cursor`, tool name `SendToUser`, and arguments containing the exact requested text. The direct-delivery decoder did not recognize this brokered form. The next correction accepts only that complete known broker envelope, rejects extra outer/inner keys and other namespaces/tools, and still requires exact requested text. It never executes the wrapper. Final acceptance remains pending.
+
+
+Broker literal-delivery revision `cc1c849` has source digest `15da0410c7aa42bfcf7ba99ece4768a4e74fb1ae7b3a77c13f9c3e02608520eb`, Mac ZIP SHA-256 `75d0c8a43ad4e456d530e2015e5e717e1c5c61f95469d357a478325234736ce5`, runtime SHA-256 `541f5b9011f1593ad057ab91e3a7a56ed876a8745fce7d9016e6f779e5cd3f7e`, and clean source ZIP SHA-256 `9db1cd739504d67f9155c2198ddbef8604957608014bf9a109a8d6572ce150b7`. The full 70-runtime-test suite, 17 Python tests, installer integration, Windows contracts, release checks, Mac build, and independent clean-source installation pass. The preceding failed live probe's installed runtime matched d942423; its Bot session was `ef2e4097295da4be42c801db`, its outgoing tool list was empty, and the next continuation was suppressed with `delivery-after-latest-input`.
+
+
+Revision cc1c849 verified literal normalization live at 09:40:34.540, but subsequent redacted audit exposed the native periodic episode-summary helper reusing cached chat tools. See `acceptance-beta47-cc1c849-0.36.0.md`. The next revision isolates that exact `summarizeEpisode` executor call alongside memory extraction. Both helpers retain original instructions, no tools, and separate thread/state behavior. Full automated tests pass.

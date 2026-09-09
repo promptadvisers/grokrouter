@@ -49,6 +49,12 @@ async function runGroup(runner, roomSession, request3, promptForAttempt) {
   });
   return memberResult;
 }
+async function runEpisodeSummary(session) {
+  const narrative = await summarizeEpisode({
+    executor: session.getExecutor(),
+  });
+  return narrative;
+}
 async function runMemoryExtraction(session) {
   const extraction = await extractMemories({
     executor: session.getExecutor(),
@@ -166,12 +172,16 @@ const runner = {run: async (_, options) => runInference({resolveBoxId: () => 'bo
 const assert = require('node:assert/strict');
 loadGrokBotRouterConfig = () => ({});
 async function extractMemories(args) { return args.executor; }
+async function summarizeEpisode(args) { return args.executor; }
 (async () => {
   const options = {botId:'memory-bot',grokBotRouterControlText:'/provider'};
   const session = new Host().createSession(() => {}, options);
   const helper = await runMemoryExtraction(session);
   assert.equal(helper.sessionOptions.grokBotRouterTextTask, 'memory-extraction');
   assert.equal(helper.sessionOptions.botId, 'memory-bot');
+  const episode = await runEpisodeSummary(session);
+  assert.equal(episode.sessionOptions.grokBotRouterTextTask, 'episode-summary');
+  assert.equal(getGrokBotRouterSendToolName([{name:'SendToUser'}],episode.sessionOptions), null);
   assert.equal(session.getExecutor().sessionOptions.grokBotRouterTextTask, undefined);
   assert.equal(options.grokBotRouterTextTask, undefined);
   assert.equal(new Host().createSession(() => {}, {isSummarizationSession:true}), process.env.SAND_AGENT_MOCK_RESPONSE);
@@ -179,12 +189,15 @@ async function extractMemories(args) { return args.executor; }
   assert.equal(getGrokBotRouterSendToolName([], {isSummarizationSession:true}), null);
   const stock = {getExecutor: () => 'stock-executor'};
   assert.equal(await runMemoryExtraction(stock), 'stock-executor');
+  assert.equal(await runEpisodeSummary(stock), 'stock-executor');
 })().catch(error=>{console.error(error);process.exitCode=1;});
 '''
         result = subprocess.run(['node','-e',script], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         with self.assertRaisesRegex(router_patch.PatchError, 'Memory extraction executor anchor'):
             router_patch.patch_text(STOCK_SOURCE.replace('const extraction = await extractMemories', 'const changed = await extractMemories'))
+        with self.assertRaisesRegex(router_patch.PatchError, 'Episode summary executor anchor'):
+            router_patch.patch_text(STOCK_SOURCE.replace('const narrative = await summarizeEpisode', 'const changed = await summarizeEpisode'))
 
     def test_executor_finishes_children_without_inventing_a_delivery_tool(self):
         # Exercise the injected executor protocol against a minimal host double.

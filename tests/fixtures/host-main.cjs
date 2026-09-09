@@ -30,6 +30,12 @@ async function runGroup(runner, roomSession, request3, promptForAttempt) {
   });
   return memberResult;
 }
+async function runEpisodeSummary(session) {
+  const narrative = await summarizeEpisode({
+    executor: session.getExecutor(),
+  });
+  return narrative;
+}
 async function runMemoryExtraction(session) {
   const extraction = await extractMemories({
     executor: session.getExecutor(),

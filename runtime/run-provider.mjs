@@ -2202,8 +2202,8 @@ export async function runTurn(input, dependencies = {}) {
   const tools = Array.isArray(input.tools) ? input.tools : [];
   const sessionOptions = input.sessionOptions && typeof input.sessionOptions === "object" ? input.sessionOptions : {};
   const { state, key, identity } = await stateForTurn(config, messages, sessionOptions);
-  const nativeTextTask = sessionOptions.grokBotRouterTextTask === "memory-extraction"
-    ? "memory-extraction" : "";
+  const nativeTextTask = ["memory-extraction", "episode-summary"].includes(sessionOptions.grokBotRouterTextTask)
+    ? sessionOptions.grokBotRouterTextTask : "";
   if (nativeTextTask) {
     const taskConfig = {
       ...config, nativeTextTask, codexThreadId: null,

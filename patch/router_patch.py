@@ -86,7 +86,7 @@ function serializeGrokBotRouterTools(tools) {
   });
 }
 function getGrokBotRouterSendToolName(tools, sessionOptions = {}) {
-  if (sessionOptions.grokBotRouterTextTask === "memory-extraction" || sessionOptions.isSummarizationSession === true) return null;
+  if (["memory-extraction", "episode-summary"].includes(sessionOptions.grokBotRouterTextTask) || sessionOptions.isSummarizationSession === true) return null;
   // A native child's result belongs in finalAssistantText, not a user bubble.
   if (sessionOptions.isSubagent === true) return null;
   const names = serializeGrokBotRouterTools(tools).map((tool) => tool.name);
@@ -282,7 +282,7 @@ SESSION_CODE = r'''
         return {
           getExecutor: (taskOptions = {}) => createGrokBotRouterPromptExecutor(grokBotRouterConfig, {
             ...sessionOptions,
-            ...(taskOptions.grokBotRouterTextTask === "memory-extraction" ? { grokBotRouterTextTask: "memory-extraction" } : {})
+            ...(["memory-extraction", "episode-summary"].includes(taskOptions.grokBotRouterTextTask) ? { grokBotRouterTextTask: taskOptions.grokBotRouterTextTask } : {})
           }),
           getModelId: () => modelId
         };
@@ -641,6 +641,13 @@ def patch_text(source: str) -> str:
     )
     if memory_count != 1:
         raise PatchError("Memory extraction executor anchor must occur exactly once")
+
+    episode_pattern = re.compile(r"(const narrative = await summarizeEpisode\(\{\n\s+executor: )session\.getExecutor\(\)")
+    source, episode_count = episode_pattern.subn(
+        lambda match: match.group(1) + 'session.getExecutor({ grokBotRouterTextTask: "episode-summary" })', source
+    )
+    if episode_count != 1:
+        raise PatchError("Episode summary executor anchor must occur exactly once")
 
     return source
 
