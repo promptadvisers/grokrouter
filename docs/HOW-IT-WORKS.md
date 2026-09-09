@@ -22,13 +22,13 @@ YouTube-ready files:
 
 The native macOS installer—and the source-preview Windows shell built around the same payload—is a guided delivery mechanism. It does not replace the Grok Bot app.
 
-1. It confirms that the installed desktop app is the supported Grok Bot 0.30.0 build.
+1. It confirms that the installed desktop app is an exact supported Grok Bot 0.30.0 or 0.36.0 build.
 2. It restarts Grok Bot with a temporary diagnostic connection bound only to `127.0.0.1` on the local computer.
 3. It opens an existing Bot computer and verifies that its Terminal is really focused before typing anything.
 4. It transfers a small compressed payload through Grok's own remote-computer connection. The payload is checked with SHA-256 before extraction.
 5. Inside the Bot computer, it installs pinned runtime dependencies and requires an exact reviewed stock-host SHA-256 and byte count. The entry comes from the bundled manifest or an Ed25519-signed registry. Every source anchor must match exactly once, and the transformed code must pass `node --check`. Structural similarity alone never authenticates a stock host. The untouched original is stored under persistent `sand-data` before patching.
-6. It injects one narrow executor into the known host. The larger provider logic remains in a separate runtime that can be replaced or removed independently.
-7. It restarts the Grok host, verifies a real success marker, closes the diagnostic connection and reopens Grok Bot normally.
+6. It installs the narrow provider adapter and preserves the native child-completion identity needed to return results to the parent. The larger provider logic remains in a separate runtime that can be replaced or removed independently.
+7. It verifies the payload success marker and native command registration, then restarts the Grok host, verifies the restart receipt, closes the diagnostic connection and reopens Grok Bot normally.
 
 If the app version, source anchors, payload checksum, registry signature, Terminal focus or generated code does not match expectations, installation stops rather than guessing. A rejected host produces a safe fingerprint, the read-only syntax result, the trust tier, and the reason; Grok host source is never uploaded. The Bot terminal is read back through screenshot OCR, so installer attempt IDs use only characters OCR does not confuse, and the completion timeout restarts whenever a new phase is observed.
 
