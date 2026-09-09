@@ -3,7 +3,9 @@ import CryptoKit
 import Foundation
 import Vision
 
-private let supportedGrokVersion = "0.30.0"
+private let supportedGrokVersions = ["0.30.0", "0.36.0"]
+private let supportedGrokVersion = supportedGrokVersions.joined(separator: ", ")
+private var detectedGrokVersion = "0.30.0"
 private let grokBundleIdentifier = "com.anysphere.sand"
 private let grokAppPath = "/Applications/Grok Bot.app"
 private let cdpPort = 19222
@@ -80,14 +82,14 @@ final class CDPClient {
         }
     }
 
-    func call(_ method: String, params: [String: Any] = [:], sessionID: String? = nil) async throws -> [String: Any] {
+    func call(_ method: String, params: [String: Any] = [:], sessionID: String? = nil, timeoutSeconds: TimeInterval = 12) async throws -> [String: Any] {
         let timeout = DispatchWorkItem { [weak self] in
             // Closing the socket unblocks URLSessionWebSocketTask.receive even
             // when Swift task cancellation alone does not. A retry then opens
             // a brand-new diagnostic client instead of inheriting the stall.
             self?.task.cancel(with: .goingAway, reason: nil)
         }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 12, execute: timeout)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeoutSeconds, execute: timeout)
         defer { timeout.cancel() }
         do {
             return try await callUnbounded(method, params: params, sessionID: sessionID)
@@ -221,7 +223,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         iconView.widthAnchor.constraint(equalToConstant: 88).isActive = true
         iconView.heightAnchor.constraint(equalToConstant: 88).isActive = true
 
-        let eyebrow = NSTextField(labelWithString: "GROK BOT 0.30.0")
+        let eyebrow = NSTextField(labelWithString: "GROK BOT 0.30 / 0.36")
         eyebrow.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
         eyebrow.textColor = NSColor(calibratedRed: 1.0, green: 0.48, blue: 0.12, alpha: 1)
         let title = NSTextField(labelWithString: "Bring your own model.")
@@ -366,7 +368,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         logView.textColor = NSColor(calibratedWhite: 0.76, alpha: 1)
         logView.backgroundColor = NSColor(calibratedRed: 0.035, green: 0.038, blue: 0.041, alpha: 1)
         logView.textContainerInset = NSSize(width: 12, height: 10)
-        logView.string = "The installer will verify Grok Bot 0.30.0, create a stock backup, install the pinned runtime, and test the result.\n"
+        logView.string = "The installer will verify the supported Grok Bot version and vendor signature, create a stock backup, install the pinned runtime, and test the result.\n"
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.borderType = .noBorder
@@ -673,7 +675,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
     @objc private func startRepair() {
         runOperation("Repairing the version-gated host adapter…") {
             try await self.sendRemoteCommand(
-                "/home/box/.local/bin/grokbot-router repair",
+                "/home/box/.local/bin/grokbot-router repair --no-restart",
                 relaunch: false,
                 confirmationSentinel: "GROKBOT_ROUTER_REPAIR_OK",
                 nativeWorkflowOperation: "sync"
@@ -706,13 +708,24 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             throw InstallerError.message("Install the official Grok Bot app in /Applications first.")
         }
         let version = info["CFBundleShortVersionString"] as? String ?? "unknown"
-        guard version == supportedGrokVersion else {
+        guard supportedGrokVersions.contains(version) else {
             throw InstallerError.message("Grok Bot \(version) is not supported. This beta is pinned to \(supportedGrokVersion) and will not patch an unknown build.")
         }
+        let verification = Process()
+        verification.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        verification.arguments = ["--verify", "--deep", "--strict", "-R", "=anchor apple generic and identifier \"com.anysphere.sand\" and certificate leaf[subject.OU] = \"DCNK4UB866\"", grokAppPath]
+        verification.standardOutput = FileHandle.nullDevice
+        verification.standardError = FileHandle.nullDevice
+        try verification.run()
+        verification.waitUntilExit()
+        guard verification.terminationStatus == 0 else {
+            throw InstallerError.message("The installed Grok Bot app does not have the expected valid vendor signature. Nothing was changed.")
+        }
+        detectedGrokVersion = version
     }
 
     private func relaunchGrokWithDiagnostics() async throws {
-        appendLog("Verified Grok Bot \(supportedGrokVersion). Restarting with a local diagnostic port…")
+        appendLog("Verified Grok Bot \(detectedGrokVersion). Restarting with a local diagnostic port…")
         await stopRunningGrok()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
@@ -816,12 +829,12 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         value.hasPrefix("sk-or-v1-") && value.count >= 33 && !value.contains(where: { $0.isWhitespace })
     }
 
-    private func evaluate(_ client: CDPClient, sessionID: String, expression: String) async throws -> [String: Any] {
+    private func evaluate(_ client: CDPClient, sessionID: String, expression: String, timeoutSeconds: TimeInterval = 12) async throws -> [String: Any] {
         let response = try await client.call("Runtime.evaluate", params: [
             "expression": expression,
             "awaitPromise": true,
             "returnByValue": true
-        ], sessionID: sessionID)
+        ], sessionID: sessionID, timeoutSeconds: timeoutSeconds)
         if let details = response["exceptionDetails"] as? [String: Any] {
             let exception = details["exception"] as? [String: Any]
             let description = (exception?["description"] as? String)?
@@ -1321,7 +1334,10 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let response = try await evaluate(
             client,
             sessionID: pageSession,
-            expression: try nativeWorkflowExpression(operation: operation)
+            expression: try nativeWorkflowExpression(operation: operation),
+            // The workflow library alone can take 45 seconds to load; its
+            // bounded registration retries must outlive the transport default.
+            timeoutSeconds: 240
         )
         guard let remoteObject = response["result"] as? [String: Any],
               let encoded = remoteObject["value"] as? String,
@@ -1361,7 +1377,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         openRouterKey: String
     ) async throws -> String {
         try validateGrokApp()
-        updateStatus("Step 1 of 6 · Grok Bot \(supportedGrokVersion) is supported.")
+        updateStatus("Step 1 of 6 · Grok Bot \(detectedGrokVersion) is supported.")
         try await relaunchGrokWithDiagnostics()
         let client = CDPClient(url: try await browserWebSocketURL())
         let pageSession = try await mainPageSession(client)
@@ -1423,7 +1439,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             "rm -rf /tmp/grokbot-router-installer/payload",
             "mkdir -p /tmp/grokbot-router-installer/payload",
             "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; printf %s \(failurePayload) | base64 -d; echo $code; fi"
+            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --no-restart --grok-version \(detectedGrokVersion) --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; printf %s \(failurePayload) | base64 -d; echo $code; fi"
         ])
         appendLog("Transferring a SHA-256-verified payload into the Bot computer…")
         let installVNC = try await typeRemoteCommandsResilient(commands, client: client, pageSession: pageSession)
@@ -1441,6 +1457,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let workflowClient = CDPClient(url: try await browserWebSocketURL())
         let workflowPageSession = try await mainPageSession(workflowClient)
         try await updateNativeWorkflows(workflowClient, pageSession: workflowPageSession)
+        try await restartInstalledHost(workflowClient, pageSession: workflowPageSession)
         _ = try? await evaluate(workflowClient, sessionID: workflowPageSession, expression: "window.desktop.forceGatewayReconnect().then(()=>true)")
         if defaultProvider == "openrouter" {
             return "Installed with OpenRouter selected. Send /router doctor in Grok Bot."
@@ -1449,6 +1466,14 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             return "Installed. Click Start Codex Sign-in, then send /router doctor in Grok Bot."
         }
         return "Installed. Send /router doctor in Grok Bot to verify the selected model."
+    }
+
+    private func restartInstalledHost(_ client: CDPClient, pageSession: String) async throws {
+        appendLog("Native commands are registered. Restarting the Grok host…")
+        let vnc = try await typeRemoteCommandsResilient(
+            ["/home/box/.local/bin/grokbot-router restart"], client: client, pageSession: pageSession
+        )
+        try await waitForSentinel("GROKBOT_ROUTER_RESTART_REQUESTED", client: vnc.client, vnc: vnc, timeoutSeconds: 45)
     }
 
     private func sendRemoteCommand(
@@ -1476,6 +1501,8 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             let workflowClient = CDPClient(url: try await browserWebSocketURL())
             let workflowPageSession = try await mainPageSession(workflowClient)
             try await updateNativeWorkflows(workflowClient, pageSession: workflowPageSession)
+            try await restartInstalledHost(workflowClient, pageSession: workflowPageSession)
+            _ = try? await evaluate(workflowClient, sessionID: workflowPageSession, expression: "window.desktop.forceGatewayReconnect().then(()=>true)")
         }
     }
 }

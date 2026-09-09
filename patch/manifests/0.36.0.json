@@ -1,11 +1,7 @@
 {
-  "grokBotVersion": "0.30.0",
+  "grokBotVersion": "0.36.0",
   "hostPath": "/home/box/sand-host/host-main.cjs",
   "stockHosts": [
-    {
-      "sha256": "f7f8ecd03d46f1de77ca9f3f8452c977e96cd1c1c76cdd808a1a4d7e8b6d676e",
-      "bytes": 25707429
-    },
     {
       "sha256": "3364e421402302f8264f961637addb3997a817fde84a91b19635a0c28ff3941f",
       "bytes": 25656693

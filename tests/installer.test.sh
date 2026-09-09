@@ -93,7 +93,7 @@ grep -Fq 'printf %s \(failurePayload) | base64 -d; echo $code' "$PROJECT_ROOT/in
 grep -q 'INSTALLFAILED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Copy safe diagnostics' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'complete host fingerprint is included' "$PROJECT_ROOT/remote/install.sh"
-grep -q 'anchor-verified stock host' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'exact signed compatibility list' "$PROJECT_ROOT/remote/install.sh"
 grep -q 'HOSTSHA1=' "$PROJECT_ROOT/patch/router_patch.py"
 grep -q 'HOSTTRUST=' "$PROJECT_ROOT/patch/router_patch.py"
 grep -q '"anchorVerifiedHosts"' "$PROJECT_ROOT/patch/manifests/0.30.0.json"
@@ -131,7 +131,7 @@ fi
 grep -q 'private let repairButton' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Bring your own model.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 ! grep -q 'Bring your own brain.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
-grep -q 'labelWithString: "GROK BOT 0.30.0"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'labelWithString: "GROK BOT 0.30 / 0.36"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 ! grep -q 'PRIVATE BETA' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -Fq 'contentRect: NSRect(x: 0, y: 0, width: 780, height: 838)' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -Fq 'NSStackView(views: [hero, modelCard, installCard, statusCard, activityLabel, scroll])' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -146,15 +146,7 @@ grep -q 'ROUTER_BUILD_APP_ONLY' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 grep -q 'GROKROUTER_APPLICATIONS_DIR' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'GROKROUTER_NO_OPEN' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'xcode-select --install' "$PROJECT_ROOT/scripts/install-macos.sh"
-grep -q 'SOURCE_REF="source-v0.1.0-beta.46"' "$PROJECT_ROOT/scripts/install-macos.sh"
-grep -q 'source-v0.1.0-beta.46/scripts/install-macos.sh' "$PROJECT_ROOT/README.md"
-grep -Fq 'The slash menu is not the test.' "$PROJECT_ROOT/README.md"
-grep -Fq 'Fastest recovery: let Codex test the apps for you' "$PROJECT_ROOT/README.md"
-grep -Fq 'If Computer Use is available' "$PROJECT_ROOT/README.md"
-grep -Fq 'prove it in a genuinely new Bot created after the final install or repair' "$PROJECT_ROOT/README.md"
-grep -Fq 'The version is correct, but the host adapter is not patched' "$PROJECT_ROOT/README.md"
-grep -Fq 'Paste this prompt into Codex on your Mac—never into Grok Bot.' "$PROJECT_ROOT/README.md"
-grep -Fq 'A displayed beta.46 runtime version does not override this test.' "$PROJECT_ROOT/README.md"
+(cd "$PROJECT_ROOT" && node scripts/verify-release.mjs >/dev/null)
 grep -Fq 'id: install_source' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
 grep -Fq 'id: literal_provider_result' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
 grep -Fq 'id: host_adapter_result' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
@@ -228,26 +220,23 @@ TEST_RUNTIME="$TEMPORARY/runtime"
 TEST_BIN="$TEMPORARY/bin"
 TEST_GROK_SKILLS="$TEMPORARY/grok-skills"
 
-# Structural verification: the fixture hash is not on the exact list, so the
-# adapter must be accepted through anchor verification (no development
-# override) when the manifest policy permits the fixture's size, and refused
-# with a complete fingerprint when the policy is disabled.
+# A syntactically compatible unknown host must remain untouched even when
+# an independently trusted backup already exists. Exercise the real installer.
 ANCHOR_RUNTIME="$TEMPORARY/anchor-runtime"
 ANCHOR_HOST="$TEMPORARY/anchor-host-main.cjs"
 ANCHOR_BACKUP="$TEMPORARY/anchor-host-main.cjs.stock"
-ANCHOR_MANIFEST="$TEMPORARY/anchor-manifest.json"
 STRICT_MANIFEST="$TEMPORARY/strict-manifest.json"
-python3 - "$PAYLOAD/patch/manifests/0.30.0.json" "$ANCHOR_MANIFEST" "$STRICT_MANIFEST" <<'PY'
-import json
-import sys
-
+python3 - "$PAYLOAD/patch/manifests/0.30.0.json" "$STRICT_MANIFEST" "$HOST_FIXTURE" <<'PYS'
+import hashlib,json,sys
 manifest = json.load(open(sys.argv[1]))
-manifest["anchorVerifiedHosts"] = {"enabled": True, "minBytes": 0, "maxBytes": 0}
+stock = open(sys.argv[3], "rb").read()
+manifest["stockHosts"] = [{"sha256": hashlib.sha256(stock).hexdigest(), "bytes": len(stock)}]
 json.dump(manifest, open(sys.argv[2], "w"))
-manifest["anchorVerifiedHosts"] = {"enabled": False}
-json.dump(manifest, open(sys.argv[3], "w"))
-PY
+PYS
+cp "$HOST_FIXTURE" "$ANCHOR_BACKUP"
 cp "$HOST_FIXTURE" "$ANCHOR_HOST"
+printf '\n// unreviewed host replacement\n' >> "$ANCHOR_HOST"
+cp "$ANCHOR_HOST" "$TEMPORARY/expected-rejected-host"
 mkdir -p "$ANCHOR_RUNTIME"
 STRICT_FAILURE="$(ROUTER_PATCH_HOST="$ANCHOR_HOST" \
 ROUTER_PATCH_BACKUP="$ANCHOR_BACKUP" \
@@ -262,32 +251,8 @@ bash "$PAYLOAD/remote/install.sh" \
 grep -q 'GROKROUTER_STRICT9_INSTALL_FAILED_APPLY_ADAPTER_NEW_STOCK_HOST' <<<"$STRICT_FAILURE"
 grep -q 'HOSTTRUST=NONE' <<<"$STRICT_FAILURE"
 grep -q 'PATCHDRYRUN=PASS' <<<"$STRICT_FAILURE"
-cmp "$HOST_FIXTURE" "$ANCHOR_HOST"
-[[ ! -e "$ANCHOR_BACKUP" ]]
-ROUTER_PATCH_HOST="$ANCHOR_HOST" \
-ROUTER_PATCH_BACKUP="$ANCHOR_BACKUP" \
-ROUTER_PATCH_MANIFEST="$ANCHOR_MANIFEST" \
-ROUTER_BIN_DIR="$TEMPORARY/anchor-bin" \
-ROUTER_GROK_SKILLS_ROOT="$TEMPORARY/anchor-grok-skills" \
-ROUTER_INSTALL_ATTEMPT=ANCHOR9 \
-bash "$PAYLOAD/remote/install.sh" \
-  --install-root "$ANCHOR_RUNTIME" \
-  --providers openrouter \
-  --no-restart \
-  >"$TEMPORARY/install-anchor.log"
-grep -q 'GROKROUTER_ANCHOR9_PHASE_COMPLETE' "$TEMPORARY/install-anchor.log"
-grep -q 'anchor-verified stock host' "$TEMPORARY/install-anchor.log"
-grep -q '"stockBackupTrust": "anchor-verified"' "$TEMPORARY/install-anchor.log"
-grep -q 'GROKBOT_MODEL_ROUTER_V45' "$ANCHOR_HOST"
+cmp "$TEMPORARY/expected-rejected-host" "$ANCHOR_HOST"
 cmp "$HOST_FIXTURE" "$ANCHOR_BACKUP"
-python3 "$ANCHOR_RUNTIME/patch/router_patch.py" \
-  --restore \
-  --host "$ANCHOR_HOST" \
-  --backup "$ANCHOR_BACKUP" \
-  --manifest "$ANCHOR_MANIFEST" \
-  --json \
-  >/dev/null
-cmp "$HOST_FIXTURE" "$ANCHOR_HOST"
 
 cp "$HOST_FIXTURE" "$TEST_HOST"
 mkdir -p "$TEST_RUNTIME"
@@ -350,6 +315,24 @@ assert config["openRouterModels"] == [
     "google/gemini-3.1-flash-lite",
 ]
 PY
+node --input-type=module - "$TEST_RUNTIME" <<'NODESTATE'
+import {readFile, mkdir, writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const root = process.argv[2];
+const {runTurn} = await import(pathToFileURL(join(root, 'run-provider.mjs')));
+const config = JSON.parse(await readFile(join(root, 'provider.json')));
+for (const [botId, text] of [['preserve-one','/provider openrouter'],['preserve-one','/model openai/gpt-5.6-luna'],['preserve-two','/provider codex'],['preserve-two','/model gpt-5.6-terra']]) {
+  const result = await runTurn({config, messages:[{role:'user',content:text}], sessionOptions:{botId}});
+  if (!result.control) throw new Error('State fixture must use deterministic controls');
+}
+await runTurn({config, messages:[{role:'user',content:'Establish thread continuity'}], sessionOptions:{botId:'preserve-two'}}, {
+  codexFactory:()=>({startThread:()=>({id:'saved-upgrade-thread',run:async()=>({finalResponse:JSON.stringify({text:'THREAD_SAVED',toolCalls:[]})})})}),
+});
+await mkdir(join(root,'conversation-states','old.json.lock'));
+await writeFile(join(root,'conversation-states','stale.tmp'),'incomplete');
+NODESTATE
+
 python3 - "$TEST_RUNTIME/provider.json" <<'PY'
 import json
 import sys
@@ -364,6 +347,7 @@ config.update({
 with open(path, "w") as output:
     json.dump(config, output)
 PY
+cp "$TEST_RUNTIME/audit.jsonl" "$TEMPORARY/pre-upgrade-audit"
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
@@ -375,10 +359,67 @@ bash "$PAYLOAD/remote/install.sh" \
   --no-restart \
   >"$TEMPORARY/install-reuse.log"
 grep -q 'Reusing the already verified pinned Codex runtime' "$TEMPORARY/install-reuse.log"
+cmp "$TEMPORARY/pre-upgrade-audit" "$TEST_RUNTIME/audit.jsonl"
+node --input-type=module - "$TEST_RUNTIME" <<'NODESTATE'
+import assert from 'node:assert/strict';
+import {readFile, stat} from 'node:fs/promises';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const root = process.argv[2];
+const {runTurn} = await import(pathToFileURL(join(root, 'run-provider.mjs')));
+const config = JSON.parse(await readFile(join(root,'provider.json')));
+for (const [botId, provider, model] of [['preserve-one','openrouter','openai/gpt-5.6-luna'],['preserve-two','codex','gpt-5.6-terra'],['new-after-upgrade','openrouter','openai/gpt-5.6-luna']]) {
+  const result = await runTurn({config, messages:[{role:'user',content:'/provider'}], sessionOptions:{botId}});
+  assert.equal(result.provider,provider);
+  assert.equal(result.model,model);
+}
+const resumed = await runTurn({config, messages:[{role:'user',content:'Resume the saved thread'}], sessionOptions:{botId:'preserve-two'}}, {
+  codexFactory:()=>({resumeThread:(id)=>{
+    assert.equal(id,'saved-upgrade-thread');
+    return {id,run:async()=>({finalResponse:JSON.stringify({text:'THREAD_RESUMED',toolCalls:[]})})};
+  },startThread:()=>{throw new Error('Upgrade lost the Codex thread');}}),
+});
+assert.equal(resumed.text,'THREAD_RESUMED');
+assert.match(await readFile(join(root,'audit.jsonl'),'utf8'), /control_turn/);
+await assert.rejects(stat(join(root,'conversation-states','old.json.lock')), {code:'ENOENT'});
+await assert.rejects(stat(join(root,'conversation-states','stale.tmp')), {code:'ENOENT'});
+NODESTATE
+
 "$TEST_BIN/grokbot-router" status | grep -q 'Default provider: openrouter'
 "$TEST_BIN/grokbot-router" status | grep -q 'OpenRouter model: openai/gpt-5.6-luna'
 grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"
 [[ ! -e "$TEST_GROK_SKILLS/provider" && ! -L "$TEST_GROK_SKILLS/provider" ]]
+
+# Doctor's process status must agree with its real runtime and host checks.
+run_test_doctor() {
+  ROUTER_PATCH_HOST="$TEST_HOST" \
+  ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
+  ROUTER_ALLOW_UNKNOWN_HOST=1 \
+  ROUTER_HOST_REGISTRY_ROOT="$TEST_REGISTRY_ROOT" \
+  ROUTER_HOST_REGISTRY_ALLOW_OVERRIDE=1 \
+  ROUTER_HOST_REGISTRY_URL='http://unsupported-protocol.invalid/registry.json' \
+  "$TEST_BIN/grokbot-router" doctor >"$1" 2>&1
+}
+run_test_doctor "$TEMPORARY/doctor-healthy.log"
+grep -q '"hostAdapterVerified": true' "$TEMPORARY/doctor-healthy.log"
+cp "$TEST_RUNTIME/run-provider.mjs" "$TEMPORARY/valid-run-provider.mjs"
+printf '\nconst = broken;\n' >> "$TEST_RUNTIME/run-provider.mjs"
+if run_test_doctor "$TEMPORARY/doctor-runtime-failure.log"; then
+  echo 'Doctor must return failure for an invalid provider runner' >&2
+  exit 1
+fi
+grep -q 'FAILED' "$TEMPORARY/doctor-runtime-failure.log"
+cp "$TEMPORARY/valid-run-provider.mjs" "$TEST_RUNTIME/run-provider.mjs"
+cp "$TEST_HOST" "$TEMPORARY/valid-adapted-host"
+printf '\n// altered adapter\n' >> "$TEST_HOST"
+if run_test_doctor "$TEMPORARY/doctor-host-failure.log"; then
+  echo 'Doctor must return failure for an unverified adapter' >&2
+  exit 1
+fi
+grep -q 'GROKBOT_ROUTER_DOCTOR_DONE' "$TEMPORARY/doctor-host-failure.log"
+cp "$TEMPORARY/valid-adapted-host" "$TEST_HOST"
+run_test_doctor "$TEMPORARY/doctor-recovered.log"
+
 python3 "$TEST_RUNTIME/patch/router_patch.py" \
   --restore \
   --allow-unknown-host \
@@ -395,6 +436,14 @@ ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_WATCHDOG_ENABLED=0 \
 "$TEST_BIN/grokbot-router" repair >/dev/null
 grep -q 'GROKBOT_MODEL_ROUTER_V45' "$TEST_HOST"
+
+ROUTER_PATCH_HOST="$TEST_HOST" \
+ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
+ROUTER_ALLOW_UNKNOWN_HOST=1 \
+ROUTER_WATCHDOG_ENABLED=0 \
+"$TEST_BIN/grokbot-router" repair --no-restart >"$TEMPORARY/deferred-repair.log"
+grep -q 'Host restart deferred to the desktop installer' "$TEMPORARY/deferred-repair.log"
+grep -q 'GROKBOT_ROUTER_REPAIR_OK' "$TEMPORARY/deferred-repair.log"
 
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \

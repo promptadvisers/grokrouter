@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { EventEmitter } from "node:events";
+import { runInNewContext } from "node:vm";
+import crypto from "node:crypto";
 
 const main = await readFile(new URL("../installer-windows/main.cjs", import.meta.url), "utf8");
 const preload = await readFile(new URL("../installer-windows/preload.cjs", import.meta.url), "utf8");
@@ -19,7 +22,7 @@ test("Windows installer version matches the shared release version", () => {
 });
 
 test("Windows installer keeps the exact compatibility and local-only gates", () => {
-  assert.match(main, /SUPPORTED_GROK_VERSION = "0\.30\.0"/);
+  assert.match(main, /SUPPORTED_GROK_VERSIONS = \["0\.30\.0", "0\.36\.0"\]/);
   assert.match(main, /metadata\.Status !== "Valid"/);
   assert.match(main, /127\.0\.0\.1:\$\{CDP_PORT\}/);
   assert.match(main, /--remote-debugging-address=127\.0\.0\.1/);
@@ -84,6 +87,101 @@ test("Windows restore explains delayed native command cleanup", () => {
   assert.match(main, /Waiting for Grok Bot's shared command library before stock restore/);
 });
 
+test("installation registers workflows before restarting their gateway and verifies the restart receipt", async () => {
+  const installSource=main.slice(main.indexOf('async function installRouter('),main.indexOf('const REMOTE_ACTIONS'));
+  const restartSource=main.slice(main.indexOf('async function restartInstalledHost('),main.indexOf('async function sendRemoteAction('));
+  for (const failRegistration of [false,true]) {
+    const events=[];
+    let gatewayAvailable=true;
+    const install=runInNewContext(`${installSource}\n${restartSource}\ninstallRouter`,{
+      Buffer,crypto,fs:{readFileSync:()=>Buffer.from('test-payload')},
+      detectedGrokVersion:'0.36.0',validatedInstallOptions:(options)=>options,
+      setStatus:()=>{},log:()=>{},relaunchWithDiagnostics:async()=>{},
+      CDPClient:class {close(){}},browserWebSocketURL:async()=> 'ws://local-test',
+      mainPageSession:async()=> 'main',payloadPath:()=> 'test-payload',makeInstallAttemptID:()=> 'TEST',
+      typeRemoteCommandsResilient:async(commands)=>{
+        const installation=commands.find(command=>command.includes('payload/remote/install.sh'));
+        if (installation) {
+          gatewayAvailable=installation.includes('--no-restart');
+          events.push('installed');
+        }
+        if (commands.some(command=>command.endsWith('grokbot-router restart'))) {
+          events.push('restart');gatewayAvailable=false;
+        }
+        return {};
+      },
+      waitForSentinel:async(sentinel)=>{
+        if (sentinel==='GROKBOT_ROUTER_INSTALL_OK') events.push('verified');
+        if (sentinel==='GROKBOT_ROUTER_RESTART_REQUESTED') events.push('restart-verified');
+      },
+      updateNativeWorkflows:async()=>{
+        assert.equal(gatewayAvailable,true,'registration must not race a host restart');
+        if(failRegistration) throw new Error('registration rejected');
+        events.push('registered');
+      },
+      evaluate:async()=>{events.push('reconnect');return {};},
+    });
+    const pending=install('test-app',{providers:['codex'],defaultProvider:'codex',codexModel:'gpt-test',openRouterModel:'vendor/test'});
+    if(failRegistration) {
+      await assert.rejects(pending,/registration rejected/);
+      assert.deepEqual(events,['installed','verified']);
+      assert.equal(gatewayAvailable,true);
+    } else {
+      await pending;
+      assert.deepEqual(events,['installed','verified','registered','restart','restart-verified','reconnect']);
+    }
+  }
+});
+
+test("workflow evaluation survives slow readiness while normal diagnostic calls still time out", async () => {
+  let now = 0;
+  let timerID = 0;
+  const timers = new Map();
+  const schedule = (callback, delay) => {
+    const id = ++timerID;
+    timers.set(id, {at:now + delay, callback});
+    return id;
+  };
+  const advance = (time) => {
+    now = time;
+    for (const [id, timer] of [...timers]) {
+      if (timer.at <= now) { timers.delete(id); timer.callback(); }
+    }
+  };
+  class SlowSocket extends EventEmitter {
+    constructor() { super(); queueMicrotask(() => this.emit("open")); }
+    send(raw) {
+      const request = JSON.parse(raw);
+      if (request.method !== "Target.sendMessageToTarget") return;
+      queueMicrotask(() => this.emit("message", JSON.stringify({id:request.id,result:{}})));
+      const nested = JSON.parse(request.params.message);
+      schedule(() => this.emit("message", JSON.stringify({
+        method:"Target.receivedMessageFromTarget",
+        params:{sessionId:request.params.sessionId,message:JSON.stringify({id:nested.id,result:{value:"ready"}})},
+      })), 45_000);
+    }
+  }
+  const classSource = main.slice(main.indexOf("class CDPClient {"), main.indexOf("function knownGrokPaths()"));
+  const evaluateSource = main.slice(main.indexOf("async function evaluate("), main.indexOf("async function saveOpenRouterKey("));
+  const {CDPClient, evaluate} = runInNewContext(`${classSource}\n${evaluateSource}\n({CDPClient,evaluate})`, {
+    WebSocket:SlowSocket, setTimeout:schedule, clearTimeout:(id) => timers.delete(id),
+  });
+  const client = new CDPClient("ws://local-test");
+  const pending = evaluate(client, "workflow-page", "slow workflow registration", 240_000);
+  await new Promise(setImmediate);
+  advance(30_001);
+  assert.equal(client.pendingNested.size, 1, "ordinary timeout must not cancel workflow readiness");
+  advance(45_000);
+  assert.equal((await pending).value, "ready");
+  assert.equal(client.pendingNested.size, 0);
+  const timeout = assert.rejects(client.call("Target.getTargets"), /timed out/);
+  await new Promise(setImmediate);
+  advance(75_001);
+  await timeout;
+  assert.equal(client.pending.size, 0);
+  assert.match(main, /nativeWorkflowExpression\(operation\), 240_000/);
+});
+
 test("Windows renderer is isolated from Node and never stores the OpenRouter key", () => {
   assert.match(main, /contextIsolation: true/);
   assert.match(main, /nodeIntegration: false/);
@@ -96,7 +194,7 @@ test("Windows renderer is isolated from Node and never stores the OpenRouter key
   assert.match(html, /connect-src 'none'/);
   assert.match(html, /Bring your own model\./);
   assert.doesNotMatch(html, /Bring your own brain\./);
-  assert.match(html, /GROK BOT 0\.30\.0/);
+  assert.match(html, /GROK BOT 0\.30 \/ 0\.36/);
   assert.doesNotMatch(html, /PRIVATE BETA/);
 });
 

@@ -10,21 +10,37 @@ while [[ -L "$SCRIPT_SOURCE" ]]; do
   fi
 done
 INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+GROK_VERSION="$(python3 - "$INSTALL_ROOT/provider.json" "$INSTALL_ROOT/compatibility/supported-apps.json" <<'PYV'
+import json,sys
+try:
+    config = json.load(open(sys.argv[1]))
+except FileNotFoundError:
+    config = {}
+versions = json.load(open(sys.argv[2]))["versions"]
+version = config.get("grokBotVersion", "0.30.0")
+if version not in versions:
+    raise SystemExit("Configured Grok Bot version is unsupported")
+print(version)
+PYV
+)"
 REGISTRY_ROOT="${ROUTER_HOST_REGISTRY_ROOT:-/home/box/sand-data/grokbot-router-compatibility}"
-REGISTRY_PATH="$REGISTRY_ROOT/0.30.0-hosts.json"
-SIGNATURE_PATH="$REGISTRY_ROOT/0.30.0-hosts.json.sig"
-BUNDLED_REGISTRY_PATH="$INSTALL_ROOT/compatibility/0.30.0-hosts.json"
-BUNDLED_SIGNATURE_PATH="$INSTALL_ROOT/compatibility/0.30.0-hosts.json.sig"
+REGISTRY_PATH="$REGISTRY_ROOT/${GROK_VERSION}-hosts.json"
+SIGNATURE_PATH="$REGISTRY_ROOT/${GROK_VERSION}-hosts.json.sig"
+BUNDLED_REGISTRY_PATH="$INSTALL_ROOT/compatibility/${GROK_VERSION}-hosts.json"
+BUNDLED_SIGNATURE_PATH="$INSTALL_ROOT/compatibility/${GROK_VERSION}-hosts.json.sig"
 PUBLIC_KEY="$INSTALL_ROOT/compatibility/registry-public-key.pem"
 VERIFIER="$INSTALL_ROOT/bin/verify-host-registry.mjs"
-OFFICIAL_REGISTRY_URL="https://raw.githubusercontent.com/promptadvisers/grokrouter/main/compatibility/0.30.0-hosts.json"
-OFFICIAL_SIGNATURE_URL="https://raw.githubusercontent.com/promptadvisers/grokrouter/main/compatibility/0.30.0-hosts.json.sig"
+OFFICIAL_REGISTRY_URL="https://raw.githubusercontent.com/promptadvisers/grokrouter/main/compatibility/${GROK_VERSION}-hosts.json"
+OFFICIAL_SIGNATURE_URL="https://raw.githubusercontent.com/promptadvisers/grokrouter/main/compatibility/${GROK_VERSION}-hosts.json.sig"
 
 verify_registry() {
-  node "$VERIFIER" "$1" "$2" "$PUBLIC_KEY" >/dev/null
+  node "$VERIFIER" "$1" "$2" "$PUBLIC_KEY" "$GROK_VERSION" >/dev/null
 }
 
 case "${1:-verify}" in
+  version)
+    printf '%s\n' "$GROK_VERSION"
+    ;;
   verify)
     if verify_registry "$REGISTRY_PATH" "$SIGNATURE_PATH" 2>/dev/null; then
       printf '%s\n' "$REGISTRY_PATH"

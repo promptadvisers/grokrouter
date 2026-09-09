@@ -22,11 +22,11 @@ This document is the implementation-level companion to [How it works, without th
 4. The installer types a small bootstrap through the connected noVNC RFB controller. Text is paced, every retry begins with Ctrl-C, and the archive plus every payload member has an expected SHA-256.
 5. `remote/install.sh` stages pinned Node dependencies and the router payload inside the Bot computer.
 6. `patch/router_patch.py` verifies an allowlisted stock-host SHA-256 and byte-count pair plus every source anchor exactly once. The exact pair can come from the payload or a downloaded host registry whose Ed25519 signature was verified against the public key pinned in the payload. It writes a persistent verified original under `/home/box/sand-data/grokbot-router-backup/`, syntax-checks the generated JavaScript and atomically activates it.
-7. The install script prints its authoritative sentinel before restarting the host. The platform app observes that terminal output, closes the diagnostic connection and relaunches Grok Bot normally.
+7. The desktop installer runs installation with a deferred restart, observes the authoritative payload sentinel, and verifies native command registration while the gateway remains available. It then requests the host restart and requires its receipt before closing the diagnostic connection and reopening Grok Bot normally. Repair uses the same order; stock restore removes router commands before restarting.
 
 The installed runtime also starts a small persistent watchdog and registers it with the Bot desktop's XDG autostart. If Grok later replaces the live host with an allowlisted stock build while routing remains enabled, the watchdog reapplies the same exact hash, byte-count and anchor-gated patch and restarts that host. On an unknown replacement it checks for a signed registry update at most once per hour. An unsigned entry, unknown hash, wrong byte count, missing anchor, intentional stock restore or disabled router is never repaired automatically.
 
-An update follows the same path. Provider/model selections are preserved unless the installer explicitly changes them, while the packaged model catalog and runtime are replaced. A newly reviewed stock host for the same 0.30.0 seam can be added to the signed registry without replacing the installer. A new Grok Bot version or changed source seam still requires a new bundled manifest and the complete automated and fresh-Bot live gate.
+An update follows the same path. If the live file already contains a router, the patcher must exactly reconstruct it from a trusted stock backup using a supported published transformation before upgrading it. A marker alone is insufficient. An unknown or foreign live file is never automatically replaced from an older backup. Provider/model selections are preserved unless the installer explicitly changes them, while the packaged model catalog and runtime are replaced. A newly reviewed stock host for an already supported desktop version can be added to the signed registry without replacing the installer. A new Grok Bot version or changed source seam still requires a new bundled manifest and the complete automated and fresh-Bot live gate.
 
 ## Control turn
 
@@ -46,7 +46,7 @@ The installer links only missing skill names or links already owned by the curre
 
 Grok's ordinary hidden continuation prompts are filtered so a native tool result is not mistaken for another user request. A visible status message or permission bubble does not count as completion while an outer tool call remains unresolved; the matching result must still resume the provider. Every suppressed turn is recorded with a bounded reason and non-secret protocol IDs so a host-side approval gap cannot look like a silent provider failure.
 
-A finished background task is a distinct case: the stock host injects a hidden message tagged with `sandAutomationCompletionId`. The runtime strips only that hidden marker, forwards the completion to the active provider, and treats it as a new delivery boundary inside the existing user turn. This allows the child result to reach chat without replaying the earlier “subagent started” response. A durable signature combines that completion ID with later non-delivery tool-result IDs. It is claimed under the per-Bot lock before inference, expires after a bounded interval, and is cleared by reset. Sequential or concurrent host replays run once while controls and genuinely new tool rounds still proceed.
+A finished background task is a distinct case. The automation inbox injects a hidden message tagged with `sandAutomationCompletionId`. Native child revival uses a separate hidden parent request. The runtime unwraps Grok's model-facing `user_query` envelope, matches the exact hidden child-completion prefix, and uses the preserved `providerOptions.cursor.requestId` as its durable identity. Timestamps and separate message-ID parts do not hide the completion. Missing IDs, quoted lookalikes, and ordinary hidden reminders do not become completion events. The stock completion formatter is unchanged. It removes internal markers before forwarding the completion to the active provider and treats the completion as a new delivery boundary inside the existing user turn. This allows the child result to reach chat without replaying the earlier “subagent started” response. A durable signature combines that completion ID with later non-delivery tool-result IDs. It is claimed under the per-Bot lock before inference, expires after a bounded interval, and is cleared by reset. Sequential or concurrent host replays run once while controls and genuinely new tool rounds still proceed.
 
 ## Tool turn
 
@@ -58,7 +58,7 @@ Tool authority always flows from Grok outward:
 4. The host executor returns the structured request to Grok. It does not perform the action itself.
 5. Grok applies its existing permission behavior and performs the computer, file, browser or orchestration action.
 6. The matching host result appears in a later transcript invocation. The runtime normalizes it and resumes the same provider thread.
-7. The provider's final text is delivered once through Grok's normal assistant-delivery tool.
+7. Parent replies use Grok's canonical assistant-delivery handler. Native child sessions, identified by the host's `isSubagent` flag, finish through the response stream so Grok can collect their final text. A failed delivery result is not a completed answer; its durable receipt permits one recovery without replaying that receipt indefinitely.
 
 Printed pseudo-tool syntax is not authority. The guarded OpenRouter compatibility parser can recover a model's textual dialect only when it maps to the exact schema Grok offered for that turn. If Grok supplied no actionable schema, the text remains inert. This is why the latest OpenRouter Shell gate is correctly recorded as blocked rather than presented as tool parity.
 
@@ -86,7 +86,7 @@ Stable Bot, agent, chat, thread, lineage and root identifiers outrank request-sc
 
 ## Patch boundary
 
-The project never bundles Grok Bot's proprietary host source. `router_patch.py` is an original transformation with exact hashes and anchors. It injects one executor and one session selection branch. All large provider logic remains outside the host in the independently replaceable runtime.
+The project never bundles Grok Bot's proprietary host source. `router_patch.py` is an original transformation with exact hashes and anchors. It injects one executor, one session selection branch, stable Bot identity forwarding, without changing the native child formatter. All large provider logic remains outside the host in the independently replaceable runtime.
 
 ## Restore and bypass flow
 

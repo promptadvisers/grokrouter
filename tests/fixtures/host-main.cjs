@@ -10,7 +10,7 @@ class Host {
       return mockResponse;
   }
 }
-function runInference(host) {
+function runInference(host, options2 = {}) {
   const boxId = host.resolveBoxId();
   const rawTranscriptText = "@Research Bot /provider";
   const mainSessionOptions = {
@@ -23,4 +23,22 @@ function buildResult(host, finalAssistantText, sentMessageCount) {
   return {
     ...!host.isSubagentRunner ? { finalAssistantText } : {},
   };
+}
+async function runGroup(runner, roomSession, request3, promptForAttempt) {
+  const memberResult = await runner.run(promptForAttempt, {
+    isGroupMemberTurn: true,
+  });
+  return memberResult;
+}
+async function runEpisodeSummary(session) {
+  const narrative = await summarizeEpisode({
+    executor: session.getExecutor(),
+  });
+  return narrative;
+}
+async function runMemoryExtraction(session) {
+  const extraction = await extractMemories({
+    executor: session.getExecutor(),
+  });
+  return extraction;
 }

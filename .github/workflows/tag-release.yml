@@ -16,10 +16,20 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: grokrouter-source-release
+  cancel-in-progress: false
 
 jobs:
+  verify:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[tag-release]'))
+    uses: ./.github/workflows/ci.yml
   tag:
+    needs: verify
+    permissions:
+      contents: write
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[tag-release]')
     runs-on: ubuntu-latest
     steps:
@@ -45,20 +55,15 @@ jobs:
             echo "Version '$REQUESTED' is not a valid release version" >&2
             exit 1
           fi
-          for file in package.json runtime/package.json installer-windows/package.json; do
-            actual="$(node -p "require('./$file').version")"
-            if [[ "$actual" != "$REQUESTED" ]]; then
-              echo "$file is $actual but $REQUESTED was requested" >&2
-              exit 1
-            fi
-          done
-          grep -Fq "SOURCE_REF=\"source-v$REQUESTED\"" scripts/install-macos.sh
-          grep -Fq "source-v$REQUESTED/scripts/install-macos.sh" README.md
+          node scripts/verify-release.mjs "$REQUESTED"
+          node scripts/verify-acceptance.mjs
           if git ls-remote --exit-code --tags origin "source-v$REQUESTED" >/dev/null 2>&1; then
-            echo "Tag source-v$REQUESTED already exists; nothing to do" >&2
-            exit 1
+            existing="$(git rev-list -n 1 "source-v$REQUESTED")"
+            [[ "$existing" == "$(git rev-parse HEAD)" ]] || { echo "Refusing to move an existing release tag" >&2; exit 1; }
+            echo "TAG_EXISTS=true" >> "$GITHUB_ENV"
           fi
       - name: Create and push the annotated source tag
+        if: env.TAG_EXISTS != 'true'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"

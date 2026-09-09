@@ -1,0 +1,130 @@
+{
+  "version": "0.1.0-beta.47",
+  "status": "passed",
+  "sourceDigest": "86e10453fc44d718321226487aa7f7dd5d3572c900cc96d16fe55e857b48af02",
+  "supportedGrokVersions": [
+    "0.30.0",
+    "0.36.0"
+  ],
+  "gates": {
+    "mac-install-restore-reinstall": {
+      "status": "passed",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        },
+        "0.30.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.30.0.md",
+          "testedAt": "2026-09-09T10:54:00Z"
+        }
+      },
+      "evidence": "docs/TEST-MATRIX.md",
+      "testedAt": "2026-09-09T10:54:00Z"
+    },
+    "fresh-bot-controls": {
+      "status": "passed",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        },
+        "0.30.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.30.0.md",
+          "testedAt": "2026-09-09T10:54:00Z"
+        }
+      },
+      "evidence": "docs/TEST-MATRIX.md",
+      "testedAt": "2026-09-09T10:54:00Z"
+    },
+    "two-bot-isolation": {
+      "status": "passed",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        },
+        "0.30.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.30.0.md",
+          "testedAt": "2026-09-09T10:54:00Z"
+        }
+      },
+      "evidence": "docs/TEST-MATRIX.md",
+      "testedAt": "2026-09-09T10:54:00Z"
+    },
+    "channel-controls": {
+      "status": "passed",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        },
+        "0.30.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.30.0.md",
+          "testedAt": "2026-09-09T10:54:00Z"
+        }
+      },
+      "evidence": "docs/TEST-MATRIX.md",
+      "testedAt": "2026-09-09T10:54:00Z"
+    },
+    "codex-capabilities": {
+      "status": "passed",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        },
+        "0.30.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.30.0.md",
+          "testedAt": "2026-09-09T10:54:00Z"
+        }
+      },
+      "evidence": "docs/TEST-MATRIX.md",
+      "testedAt": "2026-09-09T10:54:00Z"
+    },
+    "openrouter-capabilities": {
+      "status": "passed",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        },
+        "0.30.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.30.0.md",
+          "testedAt": "2026-09-09T10:54:00Z"
+        }
+      },
+      "evidence": "docs/TEST-MATRIX.md",
+      "testedAt": "2026-09-09T10:54:00Z"
+    },
+    "clean-source-install": {
+      "status": "passed",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        },
+        "0.30.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.30.0.md",
+          "testedAt": "2026-09-09T10:54:00Z"
+        }
+      },
+      "evidence": "docs/TEST-MATRIX.md",
+      "testedAt": "2026-09-09T10:54:00Z"
+    }
+  }
+}

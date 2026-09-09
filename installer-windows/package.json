@@ -1,6 +1,6 @@
 {
   "name": "grokrouter-windows-installer",
-  "version": "0.1.0-beta.46",
+  "version": "0.1.0-beta.47",
   "private": true,
   "description": "Native Windows delivery shell for GrokRouter",
   "main": "main.cjs",

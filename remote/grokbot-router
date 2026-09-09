@@ -13,12 +13,13 @@ INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_PATH="$INSTALL_ROOT/provider.json"
 PATCHER="$INSTALL_ROOT/patch/router_patch.py"
 HOST_REGISTRY_TOOL="$INSTALL_ROOT/bin/host-registry"
+GROK_VERSION="$("$HOST_REGISTRY_TOOL" version)"
 CODEX_CLI="$INSTALL_ROOT/node_modules/.bin/codex"
 GROK_SKILLS_ROOT="${ROUTER_GROK_SKILLS_ROOT:-/home/box/.grok/skills}"
 PATCH_ARGS=(
   --host "${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
   --backup "${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
-  --manifest "${ROUTER_PATCH_MANIFEST:-$INSTALL_ROOT/patch/manifests/0.30.0.json}"
+  --manifest "${ROUTER_PATCH_MANIFEST:-$INSTALL_ROOT/patch/manifests/$GROK_VERSION.json}"
 )
 if [[ "${ROUTER_ALLOW_UNKNOWN_HOST:-0}" == "1" ]]; then
   PATCH_ARGS+=(--allow-unknown-host)
@@ -66,7 +67,7 @@ usage() {
     "Commands:" \
     "  status                         Show provider configuration" \
     "  doctor                         Verify runtime, host patch, and credentials" \
-    "  repair                         Reapply the exact-gated host patch" \
+    "  repair [--no-restart]           Reapply the exact-gated host patch" \
     "  auth codex                     Start Codex device sign-in" \
     "  provider codex|openrouter      Change the default for new Bot threads" \
     "  model codex MODEL              Change the default Codex model" \
@@ -110,6 +111,7 @@ PY
 restart_host() {
   pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true
   printf 'Host restart requested. Grok Bot should reconnect automatically.\n'
+  printf 'GROKBOT_ROUTER_RESTART_REQUESTED\n'
 }
 
 watchdog_pid_file="/home/box/sand-data/grokbot-router-watchdog.pid"
@@ -153,6 +155,10 @@ EOF
 }
 
 repair_host() {
+  if [[ -n "${1:-}" && "${1:-}" != "--no-restart" ]]; then
+    printf 'Unsupported repair option. Use --no-restart or no option.\n' >&2
+    return 2
+  fi
   require_config
   if ! repair_output="$(run_patch_install 2>&1)"; then
     printf 'Checking for a signed compatibility update…\n'
@@ -168,8 +174,12 @@ repair_host() {
   start_watchdog
   printf 'GROKBOT_ROUTER_REPAIR_OK\n'
   printf 'Known stock host patched. Automatic repair is enabled.\n'
-  nohup sh -c "sleep 3; pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true" \
-    >/dev/null 2>&1 &
+  if [[ "${1:-}" == "--no-restart" ]]; then
+    printf 'Host restart deferred to the desktop installer.\n'
+  else
+    nohup sh -c "sleep 3; pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true" \
+      >/dev/null 2>&1 &
+  fi
 }
 
 command_name="${1:-status}"
@@ -191,16 +201,21 @@ PY
     ;;
   doctor)
     require_config
-    doctor_ok=1
+    doctor_status=0
     printf 'Runtime\n'
     printf '  Node: %s\n' "$(node -v)"
     printf '  Provider runner: '
-    node --check "$INSTALL_ROOT/run-provider.mjs" >/dev/null && printf 'OK\n'
+    if node --check "$INSTALL_ROOT/run-provider.mjs" >/dev/null; then
+      printf 'OK\n'
+    else
+      printf 'FAILED\n'
+      doctor_status=1
+    fi
     printf 'Host adapter\n'
     if ! doctor_output="$(run_patch_doctor 2>&1)"; then
       refresh_registry_args || true
       if ! doctor_output="$(run_patch_doctor 2>&1)"; then
-        doctor_ok=0
+        doctor_status=1
       fi
     fi
     printf '%s\n' "$doctor_output"
@@ -233,10 +248,10 @@ PY
     printf '  Registration is managed per Bot by the GrokRouter desktop installer.\n'
     printf '  Run Repair in GrokRouter to sync Bots or channels created after installation.\n'
     printf 'GROKBOT_ROUTER_DOCTOR_DONE\n'
-    exit "$doctor_ok"
+    exit "$doctor_status"
     ;;
   repair)
-    repair_host
+    repair_host "${2:-}"
     ;;
   auth)
     if [[ "${2:-}" != "codex" ]]; then

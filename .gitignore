@@ -12,3 +12,4 @@ runtime/channel-control-latch.json
 *.zip
 handoff/
 __pycache__/
+runtime/channel-control-latch.json.*

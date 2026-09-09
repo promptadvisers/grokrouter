@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROUTER_VERSION="0.1.0-beta.46"
+ROUTER_VERSION="0.1.0-beta.47"
 PAYLOAD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_ROOT="/home/box/sand-data/grokbot-router"
 INSTALL_PARENT="/home/box/sand-data"
+GROK_VERSION="0.30.0"
 DEFAULT_PROVIDER="codex"
 CODEX_MODEL="gpt-5.6-sol"
 OPENROUTER_MODEL="anthropic/claude-sonnet-4.6"
@@ -50,6 +51,7 @@ usage() {
     "GrokRouter installer ${ROUTER_VERSION}" \
     "" \
     "Usage: install.sh [options]" \
+    "  --grok-version VERSION       Exact desktop version verified by the installer" \
     "  --provider codex|openrouter" \
     "  --providers codex|openrouter|codex,openrouter" \
     "  --codex-model MODEL" \
@@ -61,6 +63,10 @@ usage() {
 RESTART_HOST=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --grok-version)
+      GROK_VERSION="${2:?missing Grok Bot version}"
+      shift 2
+      ;;
     --provider)
       DEFAULT_PROVIDER="${2:?missing provider}"
       PROVIDER_EXPLICIT=1
@@ -134,6 +140,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+case "$GROK_VERSION" in
+  0.30.0|0.36.0) ;;
+  *) fail_install "UNSUPPORTED_VERSION" "This exact Grok Bot version is unsupported" ;;
+esac
+
 emit_phase "VALIDATE_PAYLOAD"
 printf '[1/6] Validating payload\n'
 if [[ ! -f "$PAYLOAD_ROOT/SHA256SUMS" ]]; then
@@ -146,9 +157,11 @@ for required in \
   "$PAYLOAD_ROOT/runtime/package-lock.json" \
   "$PAYLOAD_ROOT/runtime/provider.default.json" \
   "$PAYLOAD_ROOT/patch/router_patch.py" \
-  "$PAYLOAD_ROOT/patch/manifests/0.30.0.json" \
-  "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json" \
-  "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json.sig" \
+  "$PAYLOAD_ROOT/patch/previous_adapter.py" \
+  "$PAYLOAD_ROOT/patch/manifests/$GROK_VERSION.json" \
+  "$PAYLOAD_ROOT/compatibility/supported-apps.json" \
+  "$PAYLOAD_ROOT/compatibility/$GROK_VERSION-hosts.json" \
+  "$PAYLOAD_ROOT/compatibility/$GROK_VERSION-hosts.json.sig" \
   "$PAYLOAD_ROOT/compatibility/registry-public-key.pem" \
   "$PAYLOAD_ROOT/remote/grokbot-router" \
   "$PAYLOAD_ROOT/remote/grokbot-router-watchdog" \
@@ -172,10 +185,9 @@ cp "$PAYLOAD_ROOT/runtime/package-lock.json" "$STAGE_ROOT/package-lock.json"
 cp "$PAYLOAD_ROOT/runtime/provider.default.json" "$STAGE_ROOT/provider.json"
 mkdir -p "$STAGE_ROOT/patch/manifests" "$STAGE_ROOT/bin" "$STAGE_ROOT/skills" "$STAGE_ROOT/compatibility"
 cp "$PAYLOAD_ROOT/patch/router_patch.py" "$STAGE_ROOT/patch/router_patch.py"
-cp "$PAYLOAD_ROOT/patch/manifests/0.30.0.json" "$STAGE_ROOT/patch/manifests/0.30.0.json"
-cp "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json" "$STAGE_ROOT/compatibility/0.30.0-hosts.json"
-cp "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json.sig" "$STAGE_ROOT/compatibility/0.30.0-hosts.json.sig"
-cp "$PAYLOAD_ROOT/compatibility/registry-public-key.pem" "$STAGE_ROOT/compatibility/registry-public-key.pem"
+cp "$PAYLOAD_ROOT/patch/previous_adapter.py" "$STAGE_ROOT/patch/previous_adapter.py"
+cp "$PAYLOAD_ROOT/patch/manifests/"*.json "$STAGE_ROOT/patch/manifests/"
+cp "$PAYLOAD_ROOT/compatibility/"*.json "$PAYLOAD_ROOT/compatibility/"*.sig "$PAYLOAD_ROOT/compatibility/registry-public-key.pem" "$STAGE_ROOT/compatibility/"
 cp "$PAYLOAD_ROOT/remote/grokbot-router" "$STAGE_ROOT/bin/grokbot-router"
 cp "$PAYLOAD_ROOT/remote/grokbot-router-watchdog" "$STAGE_ROOT/bin/grokbot-router-watchdog"
 cp "$PAYLOAD_ROOT/remote/host-registry" "$STAGE_ROOT/bin/host-registry"
@@ -189,6 +201,7 @@ elif [[ -f "/home/box/sand-data/grok-sdk-runtime/provider.json" ]]; then
   cp "/home/box/sand-data/grok-sdk-runtime/provider.json" "$STAGE_ROOT/provider.json"
 fi
 
+ROUTER_GROK_VERSION="$GROK_VERSION" \
 ROUTER_CONFIG_PATH="$STAGE_ROOT/provider.json" \
 ROUTER_DEFAULT_CONFIG_PATH="$PAYLOAD_ROOT/runtime/provider.default.json" \
 ROUTER_INSTALL_ROOT="$INSTALL_ROOT" \
@@ -212,6 +225,7 @@ try:
 except Exception:
     config = {}
 defaults = json.loads(defaults_path.read_text())
+config["grokBotVersion"] = os.environ["ROUTER_GROK_VERSION"]
 install_root = os.environ["ROUTER_INSTALL_ROOT"]
 provider = os.environ["ROUTER_PROVIDER"]
 if os.environ["ROUTER_PROVIDER_EXPLICIT"] != "1" and config.get("provider") in {"codex", "openrouter"}:
@@ -290,6 +304,23 @@ else
   printf '[3/6] OpenRouter-only setup needs no dependency download\n'
 fi
 
+# Runtime replacement must retain Bot selections, provider threads, durable
+# delivery receipts, and the redacted audit. Temporary files and process locks
+# belong to the previous process generation and must not survive the swap.
+python3 - "$INSTALL_ROOT" "$STAGE_ROOT" <<'PYSTATE'
+from pathlib import Path
+import shutil, sys
+source, destination = map(Path, sys.argv[1:])
+for name in ("conversation-states.json", "audit.jsonl", "audit.jsonl.1"):
+    existing = source / name
+    if existing.is_file():
+        shutil.copy2(existing, destination / name)
+existing = source / "conversation-states"
+if existing.is_dir():
+    shutil.copytree(existing, destination / "conversation-states",
+                    ignore=shutil.ignore_patterns("*.lock", "*.tmp"))
+PYSTATE
+
 emit_phase "ACTIVATE_RUNTIME"
 printf '[4/6] Activating runtime atomically\n'
 if [[ -e "$INSTALL_ROOT" ]]; then
@@ -312,7 +343,7 @@ emit_phase "APPLY_ADAPTER"
 printf '[5/6] Applying version-gated host adapter\n'
 PATCH_HOST="${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
 PATCH_BACKUP="${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
-PATCH_MANIFEST="${ROUTER_PATCH_MANIFEST:-$INSTALL_ROOT/patch/manifests/0.30.0.json}"
+PATCH_MANIFEST="${ROUTER_PATCH_MANIFEST:-$INSTALL_ROOT/patch/manifests/$GROK_VERSION.json}"
 PATCH_ARGS=(
   --host "$PATCH_HOST"
   --backup "$PATCH_BACKUP"
@@ -345,14 +376,9 @@ if ! ADAPTER_OUTPUT="$(run_adapter_patch 2>&1)"; then
   fi
 fi
 printf '%s\n' "$ADAPTER_OUTPUT"
-# Tell the desktop installer which trust tier accepted this host. A host that
-# is not on the exact signed list can still be accepted when it carries no
-# router marker, matches every source anchor exactly once, and passes the
-# read-only patch plus node --check. The untouched host is backed up first.
+# Structural diagnostics never authorize a host. Only the exact reviewed
+# hash/size pair is accepted in a normal installation.
 case "$ADAPTER_OUTPUT" in
-  *'"stockTrust": "anchor-verified"'*)
-    printf 'Host accepted by structural verification (anchor-verified stock host); stock backup saved.\n'
-    ;;
   *'"stockTrust": "exact-allowlist"'*)
     printf 'Host accepted from the exact signed compatibility list; stock backup saved.\n'
     ;;

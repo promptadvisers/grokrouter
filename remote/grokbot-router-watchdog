@@ -12,8 +12,9 @@ done
 INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_PATH="$INSTALL_ROOT/provider.json"
 PATCHER="$INSTALL_ROOT/patch/router_patch.py"
-MANIFEST="$INSTALL_ROOT/patch/manifests/0.30.0.json"
 HOST_REGISTRY_TOOL="$INSTALL_ROOT/bin/host-registry"
+GROK_VERSION="$("$HOST_REGISTRY_TOOL" version)" || exit 1
+MANIFEST="$INSTALL_ROOT/patch/manifests/$GROK_VERSION.json"
 HOST="${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
 BACKUP="${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
 LOCK_DIR="/home/box/sand-data/grokbot-router-watchdog.lock"

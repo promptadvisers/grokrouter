@@ -1,4 +1,27 @@
+# GrokRouter 0.1.0-beta.47 — verified source candidate
+
+- Restores exact reviewed host hash and byte-count verification. Structural diagnostics cannot authenticate a stock host.
+- Rejects an unknown or foreign live host even when a trusted old backup exists. Automatic repair cannot silently replace a newer incompatible host.
+- Reconstructs supported published adapters from trusted originals before upgrading. Doctor now detects tampered adapter contents, not just marker presence.
+- Scopes channel-control receipts to the originating host request and keeps fresh commands ahead of follow-on suppression. Unrelated conversations remain independent.
+- Keeps an unrelated explicit user query from being replaced by a retained workflow definition.
+- Adds separately gated official Grok Bot 0.36.0 compatibility, version-specific signed registries, and macOS vendor-signature verification.
+- Parses expanded native skill-menu invocations and preserves per-Bot settings, saved threads, receipts, and audit history during runtime replacement.
+- Makes the native Reasoning entry show the current effort when invoked without an argument.
+- Repairs brokered delivery detection, failed-delivery recovery, parent/child completion, Codex empty-response recovery, and management Doctor exit status.
+- Returns one normal tool-free new-Bot greeting, keeps standalone literal replies tool-free, and normalizes verified printed delivery envelopes only when they contain the exact requested text.
+- Acknowledges a verified background launch once and waits for its actual finished-child result before delivering the answer.
+- Isolates native memory extraction and periodic episode summaries from chat tools, saved threads, and delivery receipts. Explicit native maintenance sessions retain Grok's original backend.
+- Gives native command registration time to load its workflow library while keeping ordinary diagnostic requests bounded.
+- Builds Windows packages with the Electron version pinned in their manifest.
+- Makes source tagging depend on CI and a versioned acceptance record tied to the candidate's source digest. Keeps the existing download link until the new tag is available.
+- Adds CodeQL analysis, release validation tests, and clearer compatibility/recovery documentation.
+
+The unchanged final Mac artifact passed all seven required live gates independently on official Grok Bot 0.30.0 and 0.36.0. Codex Sol and OpenRouter Claude completed real computer tools and returned actual native child results once. Publication is pending the protected release workflow. Windows remains a source preview; 0.44.0 and unreviewed host hashes remain unsupported. Provider/helper limitations and exact receipts are recorded in [the verification matrix](docs/TEST-MATRIX.md).
+
 # GrokRouter 0.1.0-beta.46
+
+Historical notes below describe beta.46's released policy. The maintenance review did not authenticate every reported host as stock; structural checks did not establish that provenance. Beta.47 restores exact reviewed verification and fixes the unsafe backup fallback.
 
 Installs on rotating Grok Bot 0.30.0 host builds without a per-hash approval.
 
