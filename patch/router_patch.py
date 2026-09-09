@@ -265,6 +265,22 @@ var GrokBotRouterPromptExecutor = class extends MockPromptExecutor {
 function createGrokBotRouterPromptExecutor(config, sessionOptions) {
   return new GrokBotRouterPromptExecutor(config, sessionOptions, void 0);
 }
+function buildSubagentRevivalPrompt(completions) {
+  const text = buildGrokBotRouterNativeRevivalPrompt(completions);
+  if (!loadGrokBotRouterConfig() || !Array.isArray(completions) || !completions.length) return text;
+  const ids = completions.map((completion) => {
+    const callId = completion?.toolCallId || completion?.subagentRequestId;
+    return typeof callId === "string" && callId.trim()
+      ? [String(completion?.subagentAgentId || ""), callId.trim()]
+      : null;
+  });
+  // The native formatter otherwise discards these durable dispatch IDs.
+  // Never mint a completion identity from its title, output, or position.
+  if (ids.some((id) => id === null)) return text;
+  const id = require("node:crypto").createHash("sha256")
+    .update(JSON.stringify(ids.map((value) => JSON.stringify(value)).sort())).digest("hex");
+  return `[GROKBOT_ROUTER_CHILD_COMPLETION:${id}]\n${text}`;
+}
 '''.strip()
 
 
@@ -571,6 +587,13 @@ def patch_text(source: str) -> str:
         return source
     if LEGACY_MARKER.search(source):
         raise PatchError("Legacy adapter detected; restore the verified stock backup before patching")
+
+    revival_anchor = "function buildSubagentRevivalPrompt(completions) {"
+    if source.count(revival_anchor) != 1:
+        raise PatchError("Native child completion formatter anchor was not unique")
+    source = source.replace(
+        revival_anchor, "function buildGrokBotRouterNativeRevivalPrompt(completions) {", 1
+    )
 
     executor_pattern = re.compile(
         r"(function createMockPromptExecutor\(options2\) \{\n"

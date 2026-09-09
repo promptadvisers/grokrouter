@@ -57,6 +57,10 @@ export function automationCompletionId(message) {
   // user message. Match its exact envelope and deduplicate by that durable ID;
   // equal child output from another request remains a distinct completion.
   const content = message?.content ?? message?.message?.content ?? message?.data?.content;
+  const nativeMarker = messageRole(message) === "user" && collectText(content).match(
+    /^\s*\[SAND_HIDDEN_PROMPT\]\s*\[GROKBOT_ROUTER_CHILD_COMPLETION:([a-f0-9]{64})\]\s*\[A background task just completed\](?:\s|$)/,
+  );
+  if (nativeMarker) return `grok-child-dispatch:${nativeMarker[1]}`;
   if (messageRole(message) === "user"
     && /^\s*\[SAND_HIDDEN_PROMPT\]\s*\[A background task just completed\](?:\s|$)/.test(collectText(content))) {
     for (const cursor of candidates) {
@@ -72,6 +76,7 @@ export function automationCompletionText(message) {
   const content = message?.content ?? message?.message?.content ?? message?.data?.content;
   const text = collectText(content)
     .replace(/^\s*\[SAND_HIDDEN_PROMPT\]\s*/i, "")
+    .replace(/^\[GROKBOT_ROUTER_CHILD_COMPLETION:[a-f0-9]{64}\]\s*/, "")
     .trim();
   return text || "Background task completed with no text output.";
 }
@@ -1498,6 +1503,7 @@ function auditMessageShape(message) {
   return {
     role: messageRole(message) || null,
     automationCompletion: Boolean(automationCompletionId(message)),
+    cursorKeys: Object.keys(message?.providerOptions?.cursor ?? message?.message?.providerOptions?.cursor ?? message?.data?.providerOptions?.cursor ?? {}).sort().slice(0, 20),
     keys: message && typeof message === "object" ? Object.keys(message).sort().slice(0, 20) : [],
     contentKind: Array.isArray(content) ? "array" : typeof content,
     parts: parts.slice(0, 12).map((part) => ({

@@ -394,6 +394,12 @@ test("native child completion requires its exact hidden envelope and durable hos
     assert.equal(automationCompletionId({...completion, content}), "");
   }
   assert.deepEqual(await openRouterMessages([completion]), [{role: "user", content: text.replace("[SAND_HIDDEN_PROMPT]", "")}]);
+  const id = "a".repeat(64);
+  const bridged = {...completion, providerOptions: {}, content: text.replace("[SAND_HIDDEN_PROMPT]", `[SAND_HIDDEN_PROMPT][GROKBOT_ROUTER_CHILD_COMPLETION:${id}]\n`)};
+  assert.equal(automationCompletionId(bridged), `grok-child-dispatch:${id}`);
+  assert.deepEqual(await openRouterMessages([bridged]), await openRouterMessages([completion]));
+  assert.equal(automationCompletionId({...bridged, content: bridged.content.replace(id, "malformed")}), "");
+  assert.equal(automationCompletionId({...bridged, content: bridged.content.replace("[A background task just completed]", "ordinary hidden reminder")}), "");
 });
 
 test("native child request IDs revive once and distinguish identical returned results", async () => {
@@ -403,7 +409,7 @@ test("native child request IDs revive once and distinguish identical returned re
   const config = {provider: "openrouter", providers: ["openrouter"], openRouterModel: "openai/test-model", statePath: join(root, "states.json"), auditPath: join(root, "audit.jsonl")};
   const launch = {role: "assistant", content: [{type: "tool-call", toolCallId: "grokbot-router-send-waiting", toolName: "SendToUser", args: {type: "text", content: "Waiting for the child."}}]};
   const base = [user("Delegate and return the child result"), launch];
-  const completion = (requestId) => ({role: "user", content: '[SAND_HIDDEN_PROMPT][A background task just completed] A background task you started has finished.\n\nBackground task "Calculate 9 times 9" (executor) finished:\n81', providerOptions: {cursor: {requestId}}});
+  const completion = (requestId) => ({role: "user", content: `[SAND_HIDDEN_PROMPT][GROKBOT_ROUTER_CHILD_COMPLETION:${createHash("sha256").update(requestId).digest("hex")}]\n[A background task just completed] A background task you started has finished.\n\nBackground task "Calculate 9 times 9" (executor) finished:\n81`});
   let requests = 0;
   const fetchImpl = async () => {
     requests += 1;

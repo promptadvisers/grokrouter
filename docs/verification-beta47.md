@@ -61,3 +61,19 @@ The complete local suite passes 59 runtime tests, 15 patch/executor tests, insta
 A new Bot created after `caa333e` installation greeted at 04:31:56. Its Codex child calculated 9 × 9 and stored a final assistant message containing `81` at 04:33:30. The parent transcript received the actual hidden background-completion message containing `81`, but the router recorded zero tagged completions and suppressed the unfinished parent answer. A premature child resume also produced a separate host checkpoint error. This was not a returned-child pass.
 
 Inspection of the reviewed host found two paths. The automation inbox injects `sandAutomationCompletionId`; native child revival calls the runner with a hidden prompt, and user-message conversion preserves the run's `providerOptions.cursor.requestId`. The runtime now recognizes the exact native hidden-completion envelope only when that durable request ID is present. Its deduplication key uses the request ID, never the returned text. Regression coverage rejects ordinary hidden reminders and untagged lookalikes, suppresses replay of one completion, and allows separate completion requests with identical results. Live retesting is required.
+
+### `bf2a381` candidate installation
+
+The complete local suite passed: 61 runtime tests, 15 patch/executor tests, installer/payload integration, 12 Windows tests, and 5 release/compatibility tests. The Mac application built, and a separate clean source ZIP built and installed into an isolated Applications directory with signature verification.
+
+| Item | SHA-256 |
+| --- | --- |
+| Production source digest | `828ca1e3d62e6ad02407e1814203c36e5a3b3269b882139943a83e0995d75c6d` |
+| Clean source ZIP from `git archive bf2a381` | `89bd26440e94d1edb1efb666289f22161641a6cbd512be187f6a8740486a3727` |
+| Locally built Mac ZIP | `c05c9fc7ee8287540ebe21c17f8207da188ef9320f9b8612327f1c126658a144` |
+
+At approximately 04:57 on official 0.36.0, the desktop installer reported a successful payload install, verified six unique router commands for 21 Bots and channels, and then requested the host restart. It closed the temporary diagnostic port and reopened Grok normally. The desktop subsequently showed its reconnect state. This verifies the corrected install/registration order; it does not yet complete restore/reinstall or fresh-Bot acceptance.
+
+A genuinely new Bot greeted at 04:59:10 and launched a real Codex child for 8 × 8. The child stored `64`, and the parent transcript received that actual result in a hidden completion. At 05:00:44 the visible parent instead said the returned value had not appeared; subsequent audit rows still recognized zero completions. The installed runtime SHA-256 matched the built source exactly. Request-ID recognition alone therefore failed the live gate.
+
+The next adapter revision preserves the native completion's original dispatch identity before Grok's formatter discards it. It adds a hidden marker derived only from the child and tool-call/request IDs and leaves the stock result text intact. A missing durable ID cannot produce a fabricated marker. The runtime strips the marker before provider input and uses its identity for existing continuation deduplication. The exact formatter anchor is required in addition to the existing stock hash/size gates. Tests cover unchanged stock behavior when routing is disabled, missing IDs, identical output from different dispatches, stable identity when output text changes, reordered completion batches, marker parsing, and parent revival/replay. Full local checks pass with 61 runtime and 16 patch tests; live acceptance remains pending.
