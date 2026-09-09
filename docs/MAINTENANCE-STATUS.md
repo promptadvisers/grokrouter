@@ -30,13 +30,15 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 
 - Standalone exact-text requests withhold OpenRouter tools, while final-format instructions attached to real work preserve prerequisite tools and forced delegation. A live mixed request exposed the over-broad detector.
 
-- A paired successful background launch receipt now defers final answers and delivery tools until actual completion. Other requested tools can continue; quoted, failed, and unrelated receipts do not gain authority. The native Task broker receipt, including its paragraph spacing, is covered explicitly. The guard was verified live with both providers on `351bdf7`. A fixed, receipt-backed launch acknowledgement now prevents native ack-redrive retries while the actual child result remains deferred.
+- A paired successful background launch receipt now defers final answers and delivery tools until actual completion. Other requested tools can continue; quoted, failed, and unrelated receipts do not gain authority. The native Task broker receipt, including its paragraph spacing, is covered explicitly. The guard was verified live with both providers on `351bdf7`. Revision `fdbae51` then passed both-provider native journal checks: one receipt-backed launch acknowledgement, actual child completion, one final answer, and zero ack-redrive recovery prompts. Final fresh-Bot acceptance on both supported versions remains pending.
+
+- Native memory extraction now receives a dedicated text-task marker at its exact host executor call. Memory and explicitly marked summarization tasks retain their system instructions, expose no chat tools, return text directly to the host, and do not alter saved chat threads or completion receipts. The fdbae51 live audit exposed this ancillary-task defect; corrected live acceptance remains pending.
 
 ## Verified so far
 
 - The automated runtime, patcher, installer/payload, Windows-contract, and release/compatibility suites pass locally.
 - The Mac artifact builds and passes codesign verification.
-- GitHub Mac and Windows builds and CodeQL passed on earlier revisions; the current acknowledgement correction requires its own successful checks.
+- GitHub Mac and Windows builds and CodeQL all passed for acknowledgement revision `fdbae51` (CI run `34328276039`, CodeQL run `34328276050`).
 - On official Grok Bot 0.36.0, a genuinely new Bot returned the correct native Models catalogs, switched providers and models, and reported the matching native Provider status after the expanded-invocation repair. The OpenRouter identity and exact-text retests produced one settled answer after the brokered-delivery repair.
 - Reinstalling `f0d2bca` with Codex as the default preserved the existing Bot's OpenRouter Luna selection and 36 prior audit events. Desktop Doctor verified the exact adapter and stock backup. Grok briefly failed to reconnect and one offline control failed to send; a later native Provider control completed with the preserved selection.
 - A Codex development probe completed real Shell, Read, and Screenshot calls. Earlier returned-child probes exposed delivery and message-envelope defects. Development build `544ef2d` returned actual completed-child results for both Codex and OpenRouter; the final-candidate sequence remains pending. See `verification-beta47.md` for dated, build-specific receipts.

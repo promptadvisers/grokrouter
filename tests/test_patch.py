@@ -49,6 +49,12 @@ async function runGroup(runner, roomSession, request3, promptForAttempt) {
   });
   return memberResult;
 }
+async function runMemoryExtraction(session) {
+  const extraction = await extractMemories({
+    executor: session.getExecutor(),
+  });
+  return extraction;
+}
 
 """
 
@@ -154,6 +160,31 @@ const runner = {run: async (_, options) => runInference({resolveBoxId: () => 'bo
         result = subprocess.run(['node','-e',script],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
 
+    def test_native_memory_executor_is_scoped_and_returns_text(self):
+        patched = router_patch.patch_text(STOCK_SOURCE)
+        script = patched + r'''
+const assert = require('node:assert/strict');
+loadGrokBotRouterConfig = () => ({});
+async function extractMemories(args) { return args.executor; }
+(async () => {
+  const options = {botId:'memory-bot',grokBotRouterControlText:'/provider'};
+  const session = new Host().createSession(() => {}, options);
+  const helper = await runMemoryExtraction(session);
+  assert.equal(helper.sessionOptions.grokBotRouterTextTask, 'memory-extraction');
+  assert.equal(helper.sessionOptions.botId, 'memory-bot');
+  assert.equal(session.getExecutor().sessionOptions.grokBotRouterTextTask, undefined);
+  assert.equal(options.grokBotRouterTextTask, undefined);
+  assert.equal(getGrokBotRouterSendToolName([{name:'SendToUser'}],helper.sessionOptions), null);
+  assert.equal(getGrokBotRouterSendToolName([], {isSummarizationSession:true}), null);
+  const stock = {getExecutor: () => 'stock-executor'};
+  assert.equal(await runMemoryExtraction(stock), 'stock-executor');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+'''
+        result = subprocess.run(['node','-e',script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with self.assertRaisesRegex(router_patch.PatchError, 'Memory extraction executor anchor'):
+            router_patch.patch_text(STOCK_SOURCE.replace('const extraction = await extractMemories', 'const changed = await extractMemories'))
+
     def test_executor_finishes_children_without_inventing_a_delivery_tool(self):
         # Exercise the injected executor protocol against a minimal host double.
         # Child sessions offer execution tools, but no user-delivery tool.
@@ -194,6 +225,10 @@ class MockPromptExecutor {
   const childWithDelivery = await execute([{name:"SendToUser"}]);
   assert.equal(childWithDelivery.response, "56");
   assert.deepEqual(childWithDelivery.toolCalls, []);
+  const helper = new GrokBotRouterPromptExecutor({}, {grokBotRouterTextTask:"memory-extraction"}, []);
+  const memory = await helper.stream({}, "memory", [], {}).response;
+  assert.equal(memory.response, "56");
+  assert.deepEqual(memory.toolCalls, []);
   nextResult = {text:"Working",toolCalls:[{toolName:"Shell",toolCallId:"actual-call",args:{command:"true"}}]};
   const toolTurn = await execute([{name:"Shell"}]);
   assert.equal(toolTurn.response, "");

@@ -2563,3 +2563,90 @@ test("only a paired successful native background receipt after the current input
     }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("native memory and summary tasks preserve Bot state and never expose cached chat tools", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokrouter-native-text-"));
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  try {
+    for (const provider of ["codex", "openrouter"]) {
+      const sessionOptions = { botId: `native-text-${provider}`, grokBotRouterControlText: "/provider openrouter" };
+      const config = { provider, providers: [provider], stateDirectory: join(root, provider), auditPath: join(root, `${provider}.jsonl`) };
+      const seed = { config, messages: [user("/provider")], sessionOptions: { botId: sessionOptions.botId } };
+      await runTurn(seed);
+      const key = conversationIdentity(seed.messages, seed.sessionOptions).key;
+      const pathname = join(config.stateDirectory, `${key}.json`);
+      const state = JSON.parse(await readFile(pathname, "utf8"));
+      Object.assign(state, { threadId: "saved-chat-thread", tools: [{name:"Shell",parameters:{type:"object"}}], completedTurnFingerprint: "human-receipt", completedTurnAt: Date.now(), processedAutomationContinuationSignatures: ["child-receipt"] });
+      await writeFile(pathname, JSON.stringify(state));
+      const before = await readFile(pathname, "utf8");
+      for (const flags of [{ grokBotRouterTextTask: "memory-extraction" }, { isSummarizationSession: true }]) {
+        const messages = [{ role: "system", content: "Extract durable memories. Return NONE when there is nothing to retain." }, { role: "user", content: "Existing memory:\n(empty)\nLatest exchange:\nUser: /provider codex\nAssistant: status shown" }];
+        let called = 0;
+        const deps = {
+          fetchImpl: async (_, options) => {
+            called++;
+            const body = JSON.parse(options.body);
+            assert.deepEqual(body.messages, messages);
+            assert.equal(body.tools, undefined);
+            assert.equal(body.tool_choice, undefined);
+            assert.match(body.session_id, /:(memory-extraction|summarization)$/);
+            return new Response(JSON.stringify({ choices: [{ message: { content: "NONE", tool_calls: [{id:"bad",function:{name:"Shell",arguments:"{}"}}] } }] }), { status: 200 });
+          },
+          codexFactory: () => ({
+            resumeThread: () => { throw new Error("native helper resumed the chat thread"); },
+            startThread: options => {
+              assert.equal(options.sandboxMode, "read-only");
+              assert.equal(options.networkAccessEnabled, false);
+              assert.equal(options.webSearchMode, "disabled");
+              return { id: "discarded-helper-thread", run: async (prompt, options) => {
+                called++;
+                assert.match(prompt, /native host text-processing task/);
+                assert.doesNotMatch(prompt, /native shell, file editing/);
+                assert.equal(options.outputSchema.properties.toolCalls.maxItems, 0);
+                return {finalResponse: JSON.stringify({text:"NONE",toolCalls:[{toolName:"Shell",argumentsJson:"{}"}]}),usage:{}};
+              }};
+            },
+          }),
+        };
+        const output = await runTurn({config,messages,tools:[{name:"SendToUser",parameters:{type:"object"}}],sessionOptions:{...sessionOptions,...flags}},deps);
+        assert.equal(called,1);
+        assert.equal(output.text,"NONE");
+        assert.deepEqual(output.toolCalls,[]);
+        assert.equal(output.threadId,undefined);
+        assert.equal(await readFile(pathname,"utf8"),before);
+      }
+      const audit = (await readFile(config.auditPath,"utf8")).trim().split("\n").map(JSON.parse);
+      assert.equal(audit.filter(x=>x.event==="native_text_task_ok").length,2);
+      assert.equal(audit.filter(x=>x.event==="turn_start").length,0);
+      assert.equal(audit.filter(x=>x.event==="control_turn").length,1);
+    }
+  } finally {
+    if(previous===undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY=previous;
+    await rm(root,{recursive:true,force:true});
+  }
+});
+
+test("empty native text-task recovery retains the original task and rejects tools", async () => {
+  for(const provider of ["codex","openrouter"]) {
+    let calls=0;
+    const messages=[{role:"system",content:"Extract memories; return NONE if empty."},user("A quoted /provider command is data.")];
+    const config={nativeTextTask:"memory-extraction"};
+    const factory=()=>({startThread:()=>({id:"helper",run:async(prompt,options)=>{
+      calls++;
+      assert.equal(options.outputSchema.properties.toolCalls.maxItems,0);
+      if(calls===2) assert.match(prompt,/original host system instructions/);
+      return {finalResponse:JSON.stringify({text:calls===1?"":"NONE",toolCalls:[{toolName:"Shell",argumentsJson:"{}"}]}),usage:{}};
+    }})});
+    const previous=process.env.OPENROUTER_API_KEY;process.env.OPENROUTER_API_KEY=TEST_OPENROUTER_KEY;
+    try {
+      const fetchImpl=async(_,options)=>{
+        calls++;const body=JSON.parse(options.body);assert.equal(body.tools,undefined);
+        if(calls===2) assert.match(body.messages.at(-1).content,/original system instructions/);
+        return new Response(JSON.stringify({choices:[{message:{content:calls===1?"":"NONE"}}]}),{status:200});
+      };
+      const result=provider==="codex"?await runCodex(config,messages,[],factory):await runOpenRouter(config,messages,[],fetchImpl);
+      assert.equal(result.text,"NONE");assert.deepEqual(result.toolCalls,[]);assert.equal(calls,2);
+    } finally {if(previous===undefined)delete process.env.OPENROUTER_API_KEY;else process.env.OPENROUTER_API_KEY=previous;}
+  }
+});

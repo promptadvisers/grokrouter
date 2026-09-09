@@ -86,6 +86,7 @@ function serializeGrokBotRouterTools(tools) {
   });
 }
 function getGrokBotRouterSendToolName(tools, sessionOptions = {}) {
+  if (sessionOptions.grokBotRouterTextTask === "memory-extraction" || sessionOptions.isSummarizationSession === true) return null;
   // A native child's result belongs in finalAssistantText, not a user bubble.
   if (sessionOptions.isSubagent === true) return null;
   const names = serializeGrokBotRouterTools(tools).map((tool) => tool.name);
@@ -277,7 +278,10 @@ SESSION_CODE = r'''
           ? grokBotRouterConfig.openRouterModel || "anthropic/claude-sonnet-4.6"
           : grokBotRouterConfig.codexModel || "gpt-5.6-sol";
         return {
-          getExecutor: () => createGrokBotRouterPromptExecutor(grokBotRouterConfig, sessionOptions),
+          getExecutor: (taskOptions = {}) => createGrokBotRouterPromptExecutor(grokBotRouterConfig, {
+            ...sessionOptions,
+            ...(taskOptions.grokBotRouterTextTask === "memory-extraction" ? { grokBotRouterTextTask: "memory-extraction" } : {})
+          }),
           getModelId: () => modelId
         };
       }
@@ -628,6 +632,13 @@ def patch_text(source: str) -> str:
                       .reverse().find((entry) => entry.kind === "message" && entry.role === "user")
                   },
 """, 1)
+
+    memory_pattern = re.compile(r"(const extraction = await extractMemories\(\{\n\s+executor: )session\.getExecutor\(\)")
+    source, memory_count = memory_pattern.subn(
+        lambda match: match.group(1) + 'session.getExecutor({ grokBotRouterTextTask: "memory-extraction" })', source
+    )
+    if memory_count != 1:
+        raise PatchError("Memory extraction executor anchor must occur exactly once")
 
     return source
 
