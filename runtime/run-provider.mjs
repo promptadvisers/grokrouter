@@ -755,6 +755,44 @@ async function openRouterToolResults(message) {
   return converted;
 }
 
+async function pendingBackgroundAgentIds(messages) {
+  const boundary = latestInputBoundaryIndex(messages);
+  const launches = new Set();
+  const pending = new Set();
+  const orchestrationName = (name) => /^(?:task|sub[ _-]?agent|launch[ _-]?subagent|spawn[ _-]?agent)$/i.test(String(name || ""));
+  const backgroundId = (value, depth = 0) => {
+    if (depth > 8 || value == null) return null;
+    if (typeof value === "string") {
+      try { return backgroundId(JSON.parse(value), depth + 1); } catch { return null; }
+    }
+    if (typeof value !== "object" || value.success === false || value.isError === true || value.error) return null;
+    if (value.isBackgrounded === true && typeof value.agentId === "string" && value.agentId.startsWith("sand-subagent-")) return value.agentId;
+    for (const key of ["success", "result", "output", "value"]) {
+      const id = backgroundId(value[key], depth + 1);
+      if (id) return id;
+    }
+    return null;
+  };
+  for (const message of messages.slice(Math.max(0, boundary + 1))) {
+    if (messageRole(message) === "assistant") {
+      const content = message?.content ?? message?.message?.content ?? message?.data?.content;
+      for (const call of toolCallsFromGrokContent(content)) {
+        let name = call.function?.name;
+        if (/^calldynamictool$/i.test(name)) {
+          try { name = JSON.parse(call.function.arguments).toolName; } catch { continue; }
+        }
+        if (orchestrationName(name)) launches.add(call.id);
+      }
+    }
+    for (const result of await openRouterToolResults(message)) {
+      if (!launches.has(result.tool_call_id)) continue;
+      const id = backgroundId(result.content);
+      if (id) pending.add(id);
+    }
+  }
+  return [...pending];
+}
+
 function sanitizeOpenRouterConversation(messages) {
   const assistantCallIds = new Set();
   const toolResultIds = new Set();
@@ -1171,6 +1209,7 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
           "If asked which provider or model is active, use these router facts. Never deny or invent router commands.",
           "Use an outer Grok tool only when the user's task actually requires it. A standalone literal or exact-text reply must be answered directly without tools. A final-format instruction does not remove prerequisite tool work or delegation; complete that work before formatting the answer.",
           "Return your final answer to this conversation directly as content; the router delivers it. Do not discover or call a message-delivery tool merely to send that final answer.",
+          "A task receipt with isBackgrounded=true proves only that a child is running. Never infer its result. Continue other required tool work, then wait for the actual background-completion message before delivering the result.",
           ...(offeredTools.length ? [
             `The only Grok tools available in this turn are: ${offeredTools.map((tool) => tool.function.name).join(", ")}.`,
             "Invoke an available tool only through the API's native tool-calling field. Never print or narrate tool-call markup such as to=functions, code:, or JSON arguments as assistant text.",
@@ -1382,6 +1421,7 @@ function codexPrompt(config, messages, tools, resuming) {
     "To use an outer tool, return it in toolCalls. The outer host will execute it and resume this thread with the result.",
     "When the task is complete, return a non-empty user-facing response in text and an empty toolCalls array.",
     "Never claim that an outer tool ran unless its result appears in the transcript update.",
+    "A task receipt with isBackgrounded=true proves only that a child is running. Never infer its result. Continue other required tool work, then wait for the actual background-completion message before delivering the result.",
     "If the entire request is a standalone literal or exact-text reply, answer directly and return no outer tool call. A final-format instruction does not remove prerequisite tool work or delegation; complete that work before formatting the answer.",
     "Return only the structured object required by the response schema.",
     "",
@@ -2263,6 +2303,7 @@ export async function runTurn(input, dependencies = {}) {
     Object.assign(state, updated);
   }
   const effectiveTools = toolsFromHost.length ? toolsFromHost : actionableTools(state.tools);
+  const pendingBackgroundIds = await pendingBackgroundAgentIds(messages);
   const turnConfig = {
     ...config,
     provider: state.provider,
@@ -2303,7 +2344,9 @@ export async function runTurn(input, dependencies = {}) {
       : await runCodex(turnConfig, messages, effectiveTools, dependencies.codexFactory);
     if (result.emptyResponse) {
       const completion = latestAutomationCompletion(messages);
-      if (automationContinuation && completion?.text) {
+      if (pendingBackgroundIds.length) {
+        result = { ...result, text: "", emptyResponse: false };
+      } else if (automationContinuation && completion?.text) {
         result = { ...result, text: completion.text, emptyResponse: false, emptyRecovery: "automation-completion" };
       } else {
         throw new Error(`${state.provider === "codex" ? "Codex SDK" : "OpenRouter"} returned an empty response after one retry`);
@@ -2337,6 +2380,17 @@ export async function runTurn(input, dependencies = {}) {
     state.threadId = result.threadId;
     await saveThreadId(config, key, state.provider, state.model, result.threadId, threadEpoch);
   }
+  let waitingForBackground = false;
+  if (pendingBackgroundIds.length) {
+    const remainingCalls = (result.toolCalls || []).filter((call) => !isDeliveryToolCall({
+      function: { name: call.toolName, arguments: jsonString(call.args || {}) },
+    }));
+    if (result.text || remainingCalls.length !== (result.toolCalls || []).length || !remainingCalls.length) {
+      result = { ...result, text: "", toolCalls: remainingCalls };
+      waitingForBackground = !remainingCalls.length;
+      if (!waitingForBackground) await suppressed("background-delivery-deferred-while-tools-continue");
+    }
+  }
   if (continuationSignature) {
     const updated = await mutateState(config, key, state, (current) => {
       const claims = { ...(current.automationContinuationClaims || {}) };
@@ -2369,6 +2423,9 @@ export async function runTurn(input, dependencies = {}) {
       };
     });
     Object.assign(state, updated);
+  }
+  if (waitingForBackground) {
+    return { ...await suppressed("background-task-awaiting-completion"), usage: result.usage };
   }
   await recordToolLinks(config, key, result.toolCalls);
   await appendAudit(config, {

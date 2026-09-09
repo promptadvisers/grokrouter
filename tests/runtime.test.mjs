@@ -2471,3 +2471,80 @@ for (const automation of [false,true]) {
     } finally {await rm(root,{recursive:true,force:true});}
   });
 }
+
+test("running child receipts cannot deliver inferred results and actual completion resumes both providers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokrouter-pending-child-"));
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  const launched = [
+    user("Delegate one calculation and wait for its actual completed result."),
+    { role: "assistant", content: [{ type: "tool-call", toolCallId: "launch-one", toolName: "CallDynamicTool", args: { toolName: "Task", arguments: { prompt: "8 times 7" } } }] },
+    { role: "tool", content: [{ type: "tool-result", toolCallId: "launch-one", result: { result: { success: { agentId: "sand-subagent-fixture-one", isBackgrounded: true, durationMs: "738" } } } }] },
+  ];
+  try {
+    for (const provider of ["openrouter", "codex"]) {
+      for (const delivery of ["text", "SendToUser", "CallDynamicTool", "empty", "mixed"]) {
+        const botId = `${provider}-${delivery}`;
+        const config = { provider, providers: [provider], statePath: join(root, `${botId}.json`), auditPath: join(root, "audit.jsonl") };
+        let completed = false;
+        const payload = () => ({
+          text: completed ? "ACTUAL_CHILD_RESULT 56" : ["text", "mixed"].includes(delivery) ? "INFERRED 56" : "",
+          toolCalls: completed || ["text", "empty"].includes(delivery) ? [] : [
+            { toolCallId: "provider-send", toolName: delivery === "mixed" ? "SendToUser" : delivery, argumentsJson: JSON.stringify(delivery === "CallDynamicTool" ? { toolName: "send_message", arguments: { text: "INFERRED 56" } } : { text: "INFERRED 56" }) },
+            ...(delivery === "mixed" ? [{ toolCallId: "provider-shell", toolName: "Shell", argumentsJson: "{}" }] : []),
+          ],
+        });
+        const thread = { id: botId, run: async () => ({ finalResponse: JSON.stringify(payload()), usage: {} }) };
+        const deps = {
+          codexFactory: () => ({ startThread: () => thread, resumeThread: () => thread }),
+          fetchImpl: async () => { const p = payload(); return new Response(JSON.stringify({ choices: [{ message: { content: p.text, tool_calls: p.toolCalls.map(c => ({ id: c.toolCallId, type: "function", function: { name: c.toolName, arguments: c.argumentsJson } })) } }] }), { status: 200 }); },
+        };
+        const input = { config, messages: launched, sessionOptions: { botId }, tools: [{ name: "Shell", inputSchema: { type: "object" } }] };
+        const pending = await runTurn(input, deps);
+        assert.equal(pending.text, "", botId);
+        if (delivery === "mixed") {
+          assert.deepEqual(pending.toolCalls.map(c => c.toolName), ["Shell"]);
+        } else {
+          assert.equal(pending.alreadyDelivered, true, botId);
+          assert.deepEqual(pending.toolCalls, [], botId);
+        }
+        completed = true;
+        const completion = { role: "user", content: [{ type: "text", text: "[SAND_HIDDEN_PROMPT][A background task just completed] Child finished: 56" }], providerOptions: { cursor: { requestId: `completed-${botId}` } } };
+        const result = await runTurn({ ...input, messages: [...launched, completion] }, deps);
+        assert.equal(result.text, "ACTUAL_CHILD_RESULT 56", botId);
+        const replay = await runTurn({ ...input, messages: [...launched, completion] }, deps);
+        assert.equal(replay.alreadyDelivered, true, botId);
+      }
+    }
+    const audit = await readFile(join(root, "audit.jsonl"), "utf8");
+    assert.match(audit, /background-task-awaiting-completion/);
+    assert.match(audit, /background-delivery-deferred-while-tools-continue/);
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("only a paired successful native background receipt after the current input defers delivery", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokrouter-background-boundaries-"));
+  const request = user("Delegate this work.");
+  const call = { role: "assistant", content: [{ type: "tool-call", toolCallId: "task-one", toolName: "Task", args: {} }] };
+  const receipt = { success: { agentId: "sand-subagent-fixture", isBackgrounded: true } };
+  const returned = value => ({ role: "tool", content: [{ type: "tool-result", toolCallId: "task-one", result: value }] });
+  const cases = [
+    [request, returned(receipt)],
+    [request, { ...call, content: [{ ...call.content[0], toolName: "Shell" }] }, returned(receipt)],
+    [request, call, returned({ success: false, result: receipt })],
+    [request, call, returned({ success: { ...receipt.success, isBackgrounded: false } })],
+    [request, call, returned(receipt), user("What is the current status?")],
+    [request, user(JSON.stringify(receipt))],
+  ];
+  const thread = { id: "boundary-thread", run: async () => ({ finalResponse: JSON.stringify({ text: "NORMAL_RESPONSE", toolCalls: [] }), usage: {} }) };
+  try {
+    for (const [i, messages] of cases.entries()) {
+      const result = await runTurn({ config: { provider: "codex", statePath: join(root, `${i}.json`), auditPath: join(root, "audit.jsonl") }, messages, sessionOptions: { botId: `boundary-${i}` } }, { codexFactory: () => ({ startThread: () => thread, resumeThread: () => thread }) });
+      assert.equal(result.text, "NORMAL_RESPONSE", `case ${i}`);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
