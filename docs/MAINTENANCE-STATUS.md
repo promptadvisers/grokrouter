@@ -28,11 +28,13 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 
 - Native group controls receive the latest human transcript entry and durable room/message/member identity from the host dispatcher. Addressed controls execute once, other members suppress them with explicit audit reasons, and fresh ordinary input remains independent. This fixes a live channel-envelope failure and requires final-candidate retesting.
 
+- Standalone exact-text requests withhold OpenRouter tools, while final-format instructions attached to real work preserve prerequisite tools and forced delegation. A live mixed request exposed the over-broad detector.
+
 ## Verified so far
 
 - The automated runtime, patcher, installer/payload, Windows-contract, and release/compatibility suites pass locally.
 - The Mac artifact builds and passes codesign verification.
-- GitHub Mac and Windows builds and CodeQL passed on the current production commit `b5eb6ce`.
+- GitHub Mac and Windows builds and CodeQL passed on `60e5c12`; the later final-format correction requires its own successful checks.
 - On official Grok Bot 0.36.0, a genuinely new Bot returned the correct native Models catalogs, switched providers and models, and reported the matching native Provider status after the expanded-invocation repair. The OpenRouter identity and exact-text retests produced one settled answer after the brokered-delivery repair.
 - Reinstalling `f0d2bca` with Codex as the default preserved the existing Bot's OpenRouter Luna selection and 36 prior audit events. Desktop Doctor verified the exact adapter and stock backup. Grok briefly failed to reconnect and one offline control failed to send; a later native Provider control completed with the preserved selection.
 - A Codex development probe completed real Shell, Read, and Screenshot calls. Earlier returned-child probes exposed delivery and message-envelope defects. Development build `544ef2d` returned actual completed-child results for both Codex and OpenRouter; the final-candidate sequence remains pending. See `verification-beta47.md` for dated, build-specific receipts.

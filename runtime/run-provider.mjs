@@ -1127,13 +1127,19 @@ async function persistedOpenRouterKey(config) {
   throw new Error("OpenRouter needs OPENROUTER_API_KEY in Grok Bot's Secrets store");
 }
 
+function isLiteralTextOnlyRequest(text) {
+  // Formatting the result of a task does not make its prerequisite work text-only.
+  // Only unambiguous standalone literal requests may remove the offered tools.
+  return /^(?:please\s+)?(?:reply|respond|answer)\s+with\s+exactly\s+(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`|[^\s]+)(?:\s+and\s+nothing\s+else)?[.!]?\s*$/i.test(text.trim());
+}
+
 export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) {
   const apiKey = await persistedOpenRouterKey(config);
   const model = config.openRouterModel || "anthropic/claude-sonnet-4.6";
   const normalizedTools = normalizeTools(tools).map((tool) => ({ type: "function", function: tool }));
   const convertedMessages = await openRouterMessages(messages);
   const visibleUserText = latestUserText(messages);
-  const directTextOnly = /\b(?:reply|respond|answer)\s+with\s+exactly\b/i.test(visibleUserText);
+  const directTextOnly = isLiteralTextOnlyRequest(visibleUserText);
   const automaticGreeting = isAutomaticGreeting(messages);
   const offeredTools = directTextOnly || automaticGreeting ? [] : normalizedTools;
   const currentUserIndex = latestUserIndex(messages);
@@ -1163,7 +1169,7 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
           `The router control plane reports that the active provider is OpenRouter and the active model is ${model}.`,
           "The in-chat commands /provider, /models, /model, /reasoning, and /router are real and are handled before model inference.",
           "If asked which provider or model is active, use these router facts. Never deny or invent router commands.",
-          "Use an outer Grok tool only when the user's task actually requires it. A literal or exact-text reply must be answered directly without tools.",
+          "Use an outer Grok tool only when the user's task actually requires it. A standalone literal or exact-text reply must be answered directly without tools. A final-format instruction does not remove prerequisite tool work or delegation; complete that work before formatting the answer.",
           "Return your final answer to this conversation directly as content; the router delivers it. Do not discover or call a message-delivery tool merely to send that final answer.",
           ...(offeredTools.length ? [
             `The only Grok tools available in this turn are: ${offeredTools.map((tool) => tool.function.name).join(", ")}.`,
@@ -1376,7 +1382,7 @@ function codexPrompt(config, messages, tools, resuming) {
     "To use an outer tool, return it in toolCalls. The outer host will execute it and resume this thread with the result.",
     "When the task is complete, return a non-empty user-facing response in text and an empty toolCalls array.",
     "Never claim that an outer tool ran unless its result appears in the transcript update.",
-    "If the user requests a literal or exact-text reply, answer directly and return no outer tool call.",
+    "If the entire request is a standalone literal or exact-text reply, answer directly and return no outer tool call. A final-format instruction does not remove prerequisite tool work or delegation; complete that work before formatting the answer.",
     "Return only the structured object required by the response schema.",
     "",
     `Outer Grok tool schemas (${normalized.length}):`,

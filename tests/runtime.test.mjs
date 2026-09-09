@@ -1012,6 +1012,38 @@ test("an exact-text OpenRouter turn cannot wander into an outer tool", async () 
   }
 });
 
+test("final exact-output formatting preserves prerequisite tools and forced delegation", async () => {
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  try {
+    for (const [prompt, delegated] of [
+      ["Launch exactly one new sub-agent. Ask it to compute 8 times 7. Once its completion arrives, reply with exactly OPENROUTER_CHILD_OK followed by the returned number.", true],
+      ["Use the Shell tool to read the proof file, then reply with exactly its contents and nothing else.", false],
+      ["Reply with exactly the result after delegating the calculation to a sub-agent.", true],
+    ]) {
+      let body;
+      await runOpenRouter({}, [user(prompt)], [
+        { name: "GetDynamicTools", inputSchema: { type: "object" } },
+        { name: "Shell", inputSchema: { type: "object" } },
+      ], async (_url, init) => {
+        body = JSON.parse(init.body);
+        return new Response(JSON.stringify({ choices: [{ message: {
+          content: null,
+          tool_calls: [{ id: "provider-call", type: "function", function: {
+            name: delegated ? "GetDynamicTools" : "Shell", arguments: "{}",
+          } }],
+        } }] }), { status: 200 });
+      });
+      assert.equal(body.tools.length, 2, prompt);
+      assert.equal(body.tool_choice.function.name, delegated ? "GetDynamicTools" : "Shell", prompt);
+      assert.match(body.messages[0].content, /does not remove prerequisite tool work/);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+  }
+});
+
 test("a new Bot automatic greeting cannot wander into dynamic tools", async () => {
   const previous = process.env.OPENROUTER_API_KEY;
   process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
