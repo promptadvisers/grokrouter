@@ -2,6 +2,8 @@
 
 Maintenance source lock: 2026-09-08. Router candidate: 0.1.0-beta.47. Exact-candidate live acceptance is pending. Historical rows below retain their explicitly named tested versions.
 
+Current development receipts and failures are recorded in [verification-beta47.md](verification-beta47.md). Unqualified legacy “Pass” rows below are historical evidence, not acceptance of beta.47. Only the complete source-bound release record can authorize publication.
+
 The candidate restores exact hash/size acceptance, authenticates adapter upgrades by reconstruction, rejects unknown replacements even with a trusted backup, and scopes channel receipts to a host request. These changes have automated evidence; they do not inherit beta.45 live results. See `release-acceptance.json` for the release decision.
 
 | Claim | Automated evidence | Live evidence | Status |

@@ -17,6 +17,7 @@ This candidate is not released. `docs/release-acceptance.json` remains pending u
 - Codex receives one recovery attempt for an empty response on the same thread. A tagged completed-child result remains available as the fallback if both responses are empty, with a redacted recovery receipt.
 - The management Doctor returns success only when its runtime syntax and host-adapter checks pass. In-chat and desktop health checks now have separately documented scopes.
 - Native workflow registration has an operation-specific diagnostic deadline long enough for the host library's readiness wait and bounded retries; ordinary transport calls keep their shorter deadlines.
+- Desktop install and repair register native commands before requesting the host restart, avoiding a gateway disconnect during registration. The restart must produce its own receipt.
 - Windows packaging uses the Electron version pinned in its dependency manifest.
 - Release version consistency, per-version live evidence, and passing CI are required before source tagging. The README retains the last published download until the new tag exists.
 

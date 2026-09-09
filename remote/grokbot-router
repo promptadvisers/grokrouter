@@ -67,7 +67,7 @@ usage() {
     "Commands:" \
     "  status                         Show provider configuration" \
     "  doctor                         Verify runtime, host patch, and credentials" \
-    "  repair                         Reapply the exact-gated host patch" \
+    "  repair [--no-restart]           Reapply the exact-gated host patch" \
     "  auth codex                     Start Codex device sign-in" \
     "  provider codex|openrouter      Change the default for new Bot threads" \
     "  model codex MODEL              Change the default Codex model" \
@@ -111,6 +111,7 @@ PY
 restart_host() {
   pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true
   printf 'Host restart requested. Grok Bot should reconnect automatically.\n'
+  printf 'GROKBOT_ROUTER_RESTART_REQUESTED\n'
 }
 
 watchdog_pid_file="/home/box/sand-data/grokbot-router-watchdog.pid"
@@ -154,6 +155,10 @@ EOF
 }
 
 repair_host() {
+  if [[ -n "${1:-}" && "${1:-}" != "--no-restart" ]]; then
+    printf 'Unsupported repair option. Use --no-restart or no option.\n' >&2
+    return 2
+  fi
   require_config
   if ! repair_output="$(run_patch_install 2>&1)"; then
     printf 'Checking for a signed compatibility update…\n'
@@ -169,8 +174,12 @@ repair_host() {
   start_watchdog
   printf 'GROKBOT_ROUTER_REPAIR_OK\n'
   printf 'Known stock host patched. Automatic repair is enabled.\n'
-  nohup sh -c "sleep 3; pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true" \
-    >/dev/null 2>&1 &
+  if [[ "${1:-}" == "--no-restart" ]]; then
+    printf 'Host restart deferred to the desktop installer.\n'
+  else
+    nohup sh -c "sleep 3; pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true" \
+      >/dev/null 2>&1 &
+  fi
 }
 
 command_name="${1:-status}"
@@ -242,7 +251,7 @@ PY
     exit "$doctor_status"
     ;;
   repair)
-    repair_host
+    repair_host "${2:-}"
     ;;
   auth)
     if [[ "${2:-}" != "codex" ]]; then

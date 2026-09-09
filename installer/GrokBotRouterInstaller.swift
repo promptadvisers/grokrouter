@@ -675,7 +675,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
     @objc private func startRepair() {
         runOperation("Repairing the version-gated host adapter…") {
             try await self.sendRemoteCommand(
-                "/home/box/.local/bin/grokbot-router repair",
+                "/home/box/.local/bin/grokbot-router repair --no-restart",
                 relaunch: false,
                 confirmationSentinel: "GROKBOT_ROUTER_REPAIR_OK",
                 nativeWorkflowOperation: "sync"
@@ -1439,7 +1439,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             "rm -rf /tmp/grokbot-router-installer/payload",
             "mkdir -p /tmp/grokbot-router-installer/payload",
             "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --grok-version \(detectedGrokVersion) --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; printf %s \(failurePayload) | base64 -d; echo $code; fi"
+            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --no-restart --grok-version \(detectedGrokVersion) --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; printf %s \(failurePayload) | base64 -d; echo $code; fi"
         ])
         appendLog("Transferring a SHA-256-verified payload into the Bot computer…")
         let installVNC = try await typeRemoteCommandsResilient(commands, client: client, pageSession: pageSession)
@@ -1457,6 +1457,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let workflowClient = CDPClient(url: try await browserWebSocketURL())
         let workflowPageSession = try await mainPageSession(workflowClient)
         try await updateNativeWorkflows(workflowClient, pageSession: workflowPageSession)
+        try await restartInstalledHost(workflowClient, pageSession: workflowPageSession)
         _ = try? await evaluate(workflowClient, sessionID: workflowPageSession, expression: "window.desktop.forceGatewayReconnect().then(()=>true)")
         if defaultProvider == "openrouter" {
             return "Installed with OpenRouter selected. Send /router doctor in Grok Bot."
@@ -1465,6 +1466,14 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             return "Installed. Click Start Codex Sign-in, then send /router doctor in Grok Bot."
         }
         return "Installed. Send /router doctor in Grok Bot to verify the selected model."
+    }
+
+    private func restartInstalledHost(_ client: CDPClient, pageSession: String) async throws {
+        appendLog("Native commands are registered. Restarting the Grok host…")
+        let vnc = try await typeRemoteCommandsResilient(
+            ["/home/box/.local/bin/grokbot-router restart"], client: client, pageSession: pageSession
+        )
+        try await waitForSentinel("GROKBOT_ROUTER_RESTART_REQUESTED", client: vnc.client, vnc: vnc, timeoutSeconds: 45)
     }
 
     private func sendRemoteCommand(
@@ -1492,6 +1501,8 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             let workflowClient = CDPClient(url: try await browserWebSocketURL())
             let workflowPageSession = try await mainPageSession(workflowClient)
             try await updateNativeWorkflows(workflowClient, pageSession: workflowPageSession)
+            try await restartInstalledHost(workflowClient, pageSession: workflowPageSession)
+            _ = try? await evaluate(workflowClient, sessionID: workflowPageSession, expression: "window.desktop.forceGatewayReconnect().then(()=>true)")
         }
     }
 }

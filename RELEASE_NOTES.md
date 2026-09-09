@@ -5,12 +5,19 @@
 - Reconstructs supported published adapters from trusted originals before upgrading. Doctor now detects tampered adapter contents, not just marker presence.
 - Scopes channel-control receipts to the originating host request and keeps fresh commands ahead of follow-on suppression. Unrelated conversations remain independent.
 - Keeps an unrelated explicit user query from being replaced by a retained workflow definition.
+- Adds separately gated official Grok Bot 0.36.0 compatibility, version-specific signed registries, and macOS vendor-signature verification.
+- Parses expanded native skill-menu invocations and preserves per-Bot settings, saved threads, receipts, and audit history during runtime replacement.
+- Repairs brokered delivery detection, failed-delivery recovery, parent/child completion, Codex empty-response recovery, and management Doctor exit status.
+- Gives native command registration time to load its workflow library while keeping ordinary diagnostic requests bounded.
+- Builds Windows packages with the Electron version pinned in their manifest.
 - Makes source tagging depend on CI and a versioned acceptance record tied to the candidate's source digest. Keeps the existing download link until the new tag is available.
 - Adds CodeQL analysis, release validation tests, and clearer compatibility/recovery documentation.
 
-Live acceptance, newer Grok Bot compatibility, and final publication remain pending. No new platform or tool capability is claimed from these source changes.
+Complete live acceptance on both supported desktop versions and final publication remain pending. No new platform or tool capability is claimed from these source changes. See [the dated verification record](docs/verification-beta47.md).
 
 # GrokRouter 0.1.0-beta.46
+
+Historical notes below describe beta.46's released policy. The maintenance review did not authenticate every reported host as stock; structural checks did not establish that provenance. Beta.47 restores exact reviewed verification and fixes the unsafe backup fallback.
 
 Installs on rotating Grok Bot 0.30.0 host builds without a per-hash approval.
 

@@ -441,6 +441,14 @@ ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_WATCHDOG_ENABLED=0 \
+"$TEST_BIN/grokbot-router" repair --no-restart >"$TEMPORARY/deferred-repair.log"
+grep -q 'Host restart deferred to the desktop installer' "$TEMPORARY/deferred-repair.log"
+grep -q 'GROKBOT_ROUTER_REPAIR_OK' "$TEMPORARY/deferred-repair.log"
+
+ROUTER_PATCH_HOST="$TEST_HOST" \
+ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
+ROUTER_ALLOW_UNKNOWN_HOST=1 \
+ROUTER_WATCHDOG_ENABLED=0 \
 ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
 "$TEST_BIN/grokbot-router" uninstall >/dev/null
 cmp "$HOST_FIXTURE" "$TEST_HOST"

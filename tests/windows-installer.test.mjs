@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { EventEmitter } from "node:events";
 import { runInNewContext } from "node:vm";
+import crypto from "node:crypto";
 
 const main = await readFile(new URL("../installer-windows/main.cjs", import.meta.url), "utf8");
 const preload = await readFile(new URL("../installer-windows/preload.cjs", import.meta.url), "utf8");
@@ -84,6 +85,52 @@ test("Windows installer registers native commands through Grok's workflow servic
 
 test("Windows restore explains delayed native command cleanup", () => {
   assert.match(main, /Waiting for Grok Bot's shared command library before stock restore/);
+});
+
+test("installation registers workflows before restarting their gateway and verifies the restart receipt", async () => {
+  const installSource=main.slice(main.indexOf('async function installRouter('),main.indexOf('const REMOTE_ACTIONS'));
+  const restartSource=main.slice(main.indexOf('async function restartInstalledHost('),main.indexOf('async function sendRemoteAction('));
+  for (const failRegistration of [false,true]) {
+    const events=[];
+    let gatewayAvailable=true;
+    const install=runInNewContext(`${installSource}\n${restartSource}\ninstallRouter`,{
+      Buffer,crypto,fs:{readFileSync:()=>Buffer.from('test-payload')},
+      detectedGrokVersion:'0.36.0',validatedInstallOptions:(options)=>options,
+      setStatus:()=>{},log:()=>{},relaunchWithDiagnostics:async()=>{},
+      CDPClient:class {close(){}},browserWebSocketURL:async()=> 'ws://local-test',
+      mainPageSession:async()=> 'main',payloadPath:()=> 'test-payload',makeInstallAttemptID:()=> 'TEST',
+      typeRemoteCommandsResilient:async(commands)=>{
+        const installation=commands.find(command=>command.includes('payload/remote/install.sh'));
+        if (installation) {
+          gatewayAvailable=installation.includes('--no-restart');
+          events.push('installed');
+        }
+        if (commands.some(command=>command.endsWith('grokbot-router restart'))) {
+          events.push('restart');gatewayAvailable=false;
+        }
+        return {};
+      },
+      waitForSentinel:async(sentinel)=>{
+        if (sentinel==='GROKBOT_ROUTER_INSTALL_OK') events.push('verified');
+        if (sentinel==='GROKBOT_ROUTER_RESTART_REQUESTED') events.push('restart-verified');
+      },
+      updateNativeWorkflows:async()=>{
+        assert.equal(gatewayAvailable,true,'registration must not race a host restart');
+        if(failRegistration) throw new Error('registration rejected');
+        events.push('registered');
+      },
+      evaluate:async()=>{events.push('reconnect');return {};},
+    });
+    const pending=install('test-app',{providers:['codex'],defaultProvider:'codex',codexModel:'gpt-test',openRouterModel:'vendor/test'});
+    if(failRegistration) {
+      await assert.rejects(pending,/registration rejected/);
+      assert.deepEqual(events,['installed','verified']);
+      assert.equal(gatewayAvailable,true);
+    } else {
+      await pending;
+      assert.deepEqual(events,['installed','verified','registered','restart','restart-verified','reconnect']);
+    }
+  }
 });
 
 test("workflow evaluation survives slow readiness while normal diagnostic calls still time out", async () => {

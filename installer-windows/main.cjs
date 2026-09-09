@@ -698,7 +698,7 @@ async function installRouter(executable, rawOptions) {
       "rm -rf /tmp/grokbot-router-installer/payload",
       "mkdir -p /tmp/grokbot-router-installer/payload",
       "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-      `if ROUTER_INSTALL_ATTEMPT=${installAttempt} bash /tmp/grokbot-router-installer/payload/remote/install.sh --grok-version ${detectedGrokVersion} --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel}; then clear; printf %s ${installPayload} | base64 -d; else code=$?; printf %s ${failurePayload} | base64 -d; echo $code; fi`,
+      `if ROUTER_INSTALL_ATTEMPT=${installAttempt} bash /tmp/grokbot-router-installer/payload/remote/install.sh --no-restart --grok-version ${detectedGrokVersion} --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel}; then clear; printf %s ${installPayload} | base64 -d; else code=$?; printf %s ${failurePayload} | base64 -d; echo $code; fi`,
     );
     log("Transferring a SHA-256-verified payload into the Bot computer…");
     const installVNC = await typeRemoteCommandsResilient(commands, client, pageSession);
@@ -707,6 +707,7 @@ async function installRouter(executable, rawOptions) {
     log("The Bot computer reported a successful install.");
     log("Registering native slash commands through Grok Bot's workflow service…");
     await updateNativeWorkflows(client, pageSession);
+    await restartInstalledHost(client, pageSession);
     await evaluate(client, pageSession, "window.desktop.forceGatewayReconnect().then(()=>true)").catch(() => {});
     if (options.defaultProvider === "openrouter") return "Installed with OpenRouter selected. Send /router doctor in Grok Bot.";
     if (options.providers.includes("codex")) return "Installed. Click Codex sign-in, then send /router doctor in Grok Bot.";
@@ -719,9 +720,15 @@ async function installRouter(executable, rawOptions) {
 const REMOTE_ACTIONS = Object.freeze({
   auth: { command: "/home/box/.local/bin/grokbot-router auth codex", sentinel: "Welcome to Codex", message: "Codex sign-in is visible in the Bot terminal. Complete the displayed device flow." },
   doctor: { command: "/home/box/.local/bin/grokbot-router doctor", sentinel: "GROKBOT_ROUTER_DOCTOR_DONE", message: "Router Doctor completed in the Bot terminal." },
-  repair: { command: "/home/box/.local/bin/grokbot-router repair", sentinel: "GROKBOT_ROUTER_REPAIR_OK", message: "Router repaired. Automatic repair is enabled. Send /provider in Grok Bot." },
+  repair: { command: "/home/box/.local/bin/grokbot-router repair --no-restart", sentinel: "GROKBOT_ROUTER_REPAIR_OK", message: "Router repaired. Automatic repair is enabled. Send /provider in Grok Bot." },
   uninstall: { command: "/home/box/.local/bin/grokbot-router uninstall", sentinel: "GROKBOT_ROUTER_UNINSTALL_OK", message: "Restore command sent. Grok Bot will reconnect to its stock host." },
 });
+
+async function restartInstalledHost(client, pageSession) {
+  log("Native commands are registered. Restarting the Grok host…");
+  const vnc = await typeRemoteCommandsResilient(["/home/box/.local/bin/grokbot-router restart"], client, pageSession);
+  await waitForSentinel("GROKBOT_ROUTER_RESTART_REQUESTED", client, vnc, 45);
+}
 
 async function sendRemoteAction(executable, action) {
   if (!(await browserWebSocketURL().then(() => true).catch(() => false))) await relaunchWithDiagnostics(executable);
@@ -735,7 +742,11 @@ async function sendRemoteAction(executable, action) {
     }
     const vnc = await typeRemoteCommandsResilient([descriptor.command], client, pageSession);
     await waitForSentinel(descriptor.sentinel, client, vnc, 45);
-    if (action === "repair") await updateNativeWorkflows(client, pageSession);
+    if (action === "repair") {
+      await updateNativeWorkflows(client, pageSession);
+      await restartInstalledHost(client, pageSession);
+      await evaluate(client, pageSession, "window.desktop.forceGatewayReconnect().then(()=>true)").catch(() => {});
+    }
     return descriptor.message;
   } finally {
     client.close();
