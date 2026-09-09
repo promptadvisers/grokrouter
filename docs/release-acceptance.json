@@ -6,5 +6,76 @@
     "0.30.0",
     "0.36.0"
   ],
-  "gates": {}
+  "gates": {
+    "mac-install-restore-reinstall": {
+      "status": "pending",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        }
+      }
+    },
+    "fresh-bot-controls": {
+      "status": "pending",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        }
+      }
+    },
+    "two-bot-isolation": {
+      "status": "pending",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        }
+      }
+    },
+    "channel-controls": {
+      "status": "pending",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        }
+      }
+    },
+    "codex-capabilities": {
+      "status": "pending",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        }
+      }
+    },
+    "openrouter-capabilities": {
+      "status": "pending",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        }
+      }
+    },
+    "clean-source-install": {
+      "status": "pending",
+      "versions": {
+        "0.36.0": {
+          "status": "passed",
+          "evidence": "docs/acceptance-beta47-644a9c4-0.36.0.md",
+          "testedAt": "2026-09-09T10:18:20Z"
+        }
+      }
+    }
+  }
 }

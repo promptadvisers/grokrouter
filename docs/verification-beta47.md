@@ -168,3 +168,6 @@ Broker literal-delivery revision `cc1c849` has source digest `15da0410c7aa42bfcf
 
 
 Revision cc1c849 verified literal normalization live at 09:40:34.540, but subsequent redacted audit exposed the native periodic episode-summary helper reusing cached chat tools. See `acceptance-beta47-cc1c849-0.36.0.md`. The next revision isolates that exact `summarizeEpisode` executor call alongside memory extraction. Both helpers retain original instructions, no tools, and separate thread/state behavior. Full automated tests pass.
+
+
+Episode-summary revision `644a9c4` has source digest `86e10453fc44d718321226487aa7f7dd5d3572c900cc96d16fe55e857b48af02`, Mac ZIP SHA-256 `7d648ff8f65cf1421f83c177c217d8f95c4620834be0eefd00164bee5e2b430f`, runtime SHA-256 `2bf4e117c00ef7799dd89bfea57abb6514def31d4539ce751114dbd0829c1ba9`, and clean source ZIP SHA-256 `8e9fbbee0164ef839ec8120c98e45c66718a5126020baf2f4710154fd0ff747c`. Full automated checks, Mac build, and independent clean-source installation pass. Before installation of this changed adapter, the preceding installer restored exact stock SHA-256 `3364e421402302f8264f961637addb3997a817fde84a91b19635a0c28ff3941f` and the actual terminal reported `ok: true`, `status: restored`, and `GROKBOT_ROUTER_UNINSTALL_OK`. Live helper regression and final acceptance remain pending.
