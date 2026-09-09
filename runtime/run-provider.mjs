@@ -763,6 +763,11 @@ function pendingBackgroundAgentIds(messages) {
   const backgroundId = (value, depth = 0) => {
     if (depth > 8 || value == null) return null;
     if (typeof value === "string") {
+      // The native Task broker renders its launch object into this exact
+      // protocol receipt. Accept it only inside a paired orchestration result;
+      // quoted user text and other tools never reach this branch with authority.
+      const receipt = value.trim().match(/^<cursor_untrusted_data_(\d+) source="Task">\nSubagent is running in the background\.\nAgent ID: (sand-subagent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}) \(can be used with the `resume` parameter to send a follow-up after it completes\)\n<\/cursor_untrusted_data_\1>$/);
+      if (receipt) return receipt[2];
       try { return backgroundId(JSON.parse(value), depth + 1); } catch { return null; }
     }
     if (typeof value !== "object" || value.success === false || value.isError === true || value.error) return null;

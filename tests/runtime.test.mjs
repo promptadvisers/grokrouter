@@ -2483,8 +2483,11 @@ test("running child receipts cannot deliver inferred results and actual completi
   ];
   try {
     for (const provider of ["openrouter", "codex"]) {
+      for (const format of ["structured", "canonical"]) {
       for (const delivery of ["text", "SendToUser", "CallDynamicTool", "empty", "mixed"]) {
-        const botId = `${provider}-${delivery}`;
+        const botId = `${provider}-${format}-${delivery}`;
+        const receiptMessages = structuredClone(launched);
+        if (format === "canonical") receiptMessages[2].content[0].result = '<cursor_untrusted_data_1337 source="Task">\nSubagent is running in the background.\nAgent ID: sand-subagent-11111111-2222-4333-8444-555555555555 (can be used with the `resume` parameter to send a follow-up after it completes)\n</cursor_untrusted_data_1337>';
         const config = { provider, providers: [provider], statePath: join(root, `${botId}.json`), auditPath: join(root, "audit.jsonl") };
         let completed = false;
         const payload = () => ({
@@ -2499,7 +2502,7 @@ test("running child receipts cannot deliver inferred results and actual completi
           codexFactory: () => ({ startThread: () => thread, resumeThread: () => thread }),
           fetchImpl: async () => { const p = payload(); return new Response(JSON.stringify({ choices: [{ message: { content: p.text, tool_calls: p.toolCalls.map(c => ({ id: c.toolCallId, type: "function", function: { name: c.toolName, arguments: c.argumentsJson } })) } }] }), { status: 200 }); },
         };
-        const input = { config, messages: launched, sessionOptions: { botId }, tools: [{ name: "Shell", inputSchema: { type: "object" } }] };
+        const input = { config, messages: receiptMessages, sessionOptions: { botId }, tools: [{ name: "Shell", inputSchema: { type: "object" } }] };
         const pending = await runTurn(input, deps);
         assert.equal(pending.text, "", botId);
         if (delivery === "mixed") {
@@ -2510,11 +2513,12 @@ test("running child receipts cannot deliver inferred results and actual completi
         }
         completed = true;
         const completion = { role: "user", content: [{ type: "text", text: "[SAND_HIDDEN_PROMPT][A background task just completed] Child finished: 56" }], providerOptions: { cursor: { requestId: `completed-${botId}` } } };
-        const result = await runTurn({ ...input, messages: [...launched, completion] }, deps);
+        const result = await runTurn({ ...input, messages: [...receiptMessages, completion] }, deps);
         assert.equal(result.text, "ACTUAL_CHILD_RESULT 56", botId);
-        const replay = await runTurn({ ...input, messages: [...launched, completion] }, deps);
+        const replay = await runTurn({ ...input, messages: [...receiptMessages, completion] }, deps);
         assert.equal(replay.alreadyDelivered, true, botId);
       }
+    }
     }
     const audit = await readFile(join(root, "audit.jsonl"), "utf8");
     assert.match(audit, /background-task-awaiting-completion/);
@@ -2532,7 +2536,13 @@ test("only a paired successful native background receipt after the current input
   const call = { role: "assistant", content: [{ type: "tool-call", toolCallId: "task-one", toolName: "Task", args: {} }] };
   const receipt = { success: { agentId: "sand-subagent-fixture", isBackgrounded: true } };
   const returned = value => ({ role: "tool", content: [{ type: "tool-result", toolCallId: "task-one", result: value }] });
+  const canonical = '<cursor_untrusted_data_1337 source="Task">\nSubagent is running in the background.\nAgent ID: sand-subagent-11111111-2222-4333-8444-555555555555 (can be used with the `resume` parameter to send a follow-up after it completes)\n</cursor_untrusted_data_1337>';
   const cases = [
+    [request, returned(canonical)],
+    [request, { ...call, content: [{ ...call.content[0], toolName: "Shell" }] }, returned(canonical)],
+    [request, call, returned(canonical.replace('source="Task"', 'source="Shell"'))],
+    [request, call, returned(canonical.replace("</cursor_untrusted_data_1337>", "</cursor_untrusted_data_1338>"))],
+    [request, user(canonical)],
     [request, returned(receipt)],
     [request, { ...call, content: [{ ...call.content[0], toolName: "Shell" }] }, returned(receipt)],
     [request, call, returned({ success: false, result: receipt })],
