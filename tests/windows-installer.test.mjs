@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { EventEmitter } from "node:events";
+import { runInNewContext } from "node:vm";
 
 const main = await readFile(new URL("../installer-windows/main.cjs", import.meta.url), "utf8");
 const preload = await readFile(new URL("../installer-windows/preload.cjs", import.meta.url), "utf8");
@@ -82,6 +84,55 @@ test("Windows installer registers native commands through Grok's workflow servic
 
 test("Windows restore explains delayed native command cleanup", () => {
   assert.match(main, /Waiting for Grok Bot's shared command library before stock restore/);
+});
+
+test("workflow evaluation survives slow readiness while normal diagnostic calls still time out", async () => {
+  let now = 0;
+  let timerID = 0;
+  const timers = new Map();
+  const schedule = (callback, delay) => {
+    const id = ++timerID;
+    timers.set(id, {at:now + delay, callback});
+    return id;
+  };
+  const advance = (time) => {
+    now = time;
+    for (const [id, timer] of [...timers]) {
+      if (timer.at <= now) { timers.delete(id); timer.callback(); }
+    }
+  };
+  class SlowSocket extends EventEmitter {
+    constructor() { super(); queueMicrotask(() => this.emit("open")); }
+    send(raw) {
+      const request = JSON.parse(raw);
+      if (request.method !== "Target.sendMessageToTarget") return;
+      queueMicrotask(() => this.emit("message", JSON.stringify({id:request.id,result:{}})));
+      const nested = JSON.parse(request.params.message);
+      schedule(() => this.emit("message", JSON.stringify({
+        method:"Target.receivedMessageFromTarget",
+        params:{sessionId:request.params.sessionId,message:JSON.stringify({id:nested.id,result:{value:"ready"}})},
+      })), 45_000);
+    }
+  }
+  const classSource = main.slice(main.indexOf("class CDPClient {"), main.indexOf("function knownGrokPaths()"));
+  const evaluateSource = main.slice(main.indexOf("async function evaluate("), main.indexOf("async function saveOpenRouterKey("));
+  const {CDPClient, evaluate} = runInNewContext(`${classSource}\n${evaluateSource}\n({CDPClient,evaluate})`, {
+    WebSocket:SlowSocket, setTimeout:schedule, clearTimeout:(id) => timers.delete(id),
+  });
+  const client = new CDPClient("ws://local-test");
+  const pending = evaluate(client, "workflow-page", "slow workflow registration", 240_000);
+  await new Promise(setImmediate);
+  advance(30_001);
+  assert.equal(client.pendingNested.size, 1, "ordinary timeout must not cancel workflow readiness");
+  advance(45_000);
+  assert.equal((await pending).value, "ready");
+  assert.equal(client.pendingNested.size, 0);
+  const timeout = assert.rejects(client.call("Target.getTargets"), /timed out/);
+  await new Promise(setImmediate);
+  advance(75_001);
+  await timeout;
+  assert.equal(client.pending.size, 0);
+  assert.match(main, /nativeWorkflowExpression\(operation\), 240_000/);
 });
 
 test("Windows renderer is isolated from Node and never stores the OpenRouter key", () => {

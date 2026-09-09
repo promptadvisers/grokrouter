@@ -172,12 +172,12 @@ class CDPClient {
     this.pendingNested.clear();
   }
 
-  responsePromise(map, key, timeoutMessage) {
+  responsePromise(map, key, timeoutMessage, timeoutMilliseconds = 30_000) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         map.delete(key);
         reject(new Error(timeoutMessage));
-      }, 30_000);
+      }, timeoutMilliseconds);
       map.set(key, { resolve, reject, timer });
     });
   }
@@ -187,22 +187,23 @@ class CDPClient {
     return message.result || {};
   }
 
-  async call(method, params = {}, sessionID = null) {
+  async call(method, params = {}, sessionID = null, timeoutMilliseconds = 30_000) {
     await this.ready;
-    if (sessionID) return this.callNested(method, params, sessionID);
+    if (sessionID) return this.callNested(method, params, sessionID, timeoutMilliseconds);
     const id = this.nextID++;
-    const response = this.responsePromise(this.pending, id, `DevTools timed out while running ${method}.`);
+    const response = this.responsePromise(this.pending, id, `DevTools timed out while running ${method}.`, timeoutMilliseconds);
     this.socket.send(JSON.stringify({ id, method, params }));
     return this.result(await response);
   }
 
-  async callNested(method, params, sessionID) {
+  async callNested(method, params, sessionID, timeoutMilliseconds = 30_000) {
     const nestedID = this.nextID++;
     const outerID = this.nextID++;
     const nestedResponse = this.responsePromise(
       this.pendingNested,
       `${sessionID}:${nestedID}`,
       `Grok Bot's computer timed out while running ${method}.`,
+      timeoutMilliseconds,
     );
     const outerResponse = this.responsePromise(this.pending, outerID, "DevTools did not accept the nested command.");
     this.socket.send(JSON.stringify({
@@ -332,12 +333,12 @@ async function mainPageSession(client) {
   return attach(client, page.id);
 }
 
-async function evaluate(client, sessionID, expression) {
+async function evaluate(client, sessionID, expression, timeoutMilliseconds = 30_000) {
   const response = await client.call("Runtime.evaluate", {
     expression,
     awaitPromise: true,
     returnByValue: true,
-  }, sessionID);
+  }, sessionID, timeoutMilliseconds);
   if (response.exceptionDetails) throw new Error("Grok Bot rejected a local installer command.");
   return response;
 }
@@ -630,7 +631,8 @@ function nativeWorkflowExpression(operation) {
 }
 
 async function updateNativeWorkflows(client, pageSession, operation = "sync") {
-  const response = await evaluate(client, pageSession, nativeWorkflowExpression(operation));
+  // Allow the 45-second workflow-library load and bounded registration retries.
+  const response = await evaluate(client, pageSession, nativeWorkflowExpression(operation), 240_000);
   const encoded = response.result?.value;
   if (typeof encoded !== "string") throw new Error("Grok Bot did not return a native command registration receipt.");
   const stats = JSON.parse(encoded);

@@ -82,14 +82,14 @@ final class CDPClient {
         }
     }
 
-    func call(_ method: String, params: [String: Any] = [:], sessionID: String? = nil) async throws -> [String: Any] {
+    func call(_ method: String, params: [String: Any] = [:], sessionID: String? = nil, timeoutSeconds: TimeInterval = 12) async throws -> [String: Any] {
         let timeout = DispatchWorkItem { [weak self] in
             // Closing the socket unblocks URLSessionWebSocketTask.receive even
             // when Swift task cancellation alone does not. A retry then opens
             // a brand-new diagnostic client instead of inheriting the stall.
             self?.task.cancel(with: .goingAway, reason: nil)
         }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 12, execute: timeout)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeoutSeconds, execute: timeout)
         defer { timeout.cancel() }
         do {
             return try await callUnbounded(method, params: params, sessionID: sessionID)
@@ -829,12 +829,12 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         value.hasPrefix("sk-or-v1-") && value.count >= 33 && !value.contains(where: { $0.isWhitespace })
     }
 
-    private func evaluate(_ client: CDPClient, sessionID: String, expression: String) async throws -> [String: Any] {
+    private func evaluate(_ client: CDPClient, sessionID: String, expression: String, timeoutSeconds: TimeInterval = 12) async throws -> [String: Any] {
         let response = try await client.call("Runtime.evaluate", params: [
             "expression": expression,
             "awaitPromise": true,
             "returnByValue": true
-        ], sessionID: sessionID)
+        ], sessionID: sessionID, timeoutSeconds: timeoutSeconds)
         if let details = response["exceptionDetails"] as? [String: Any] {
             let exception = details["exception"] as? [String: Any]
             let description = (exception?["description"] as? String)?
@@ -1334,7 +1334,10 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let response = try await evaluate(
             client,
             sessionID: pageSession,
-            expression: try nativeWorkflowExpression(operation: operation)
+            expression: try nativeWorkflowExpression(operation: operation),
+            // The workflow library alone can take 45 seconds to load; its
+            // bounded registration retries must outlive the transport default.
+            timeoutSeconds: 240
         )
         guard let remoteObject = response["result"] as? [String: Any],
               let encoded = remoteObject["value"] as? String,
