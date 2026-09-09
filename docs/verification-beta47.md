@@ -85,3 +85,21 @@ The previous installer removed six shared router commands and sent the verified-
 A new Bot greeted at 05:13:05. Its real child completed 7 × 9 with `63`; the parent received the actual hidden result with the experimental dispatch marker. Nevertheless, at 05:14:27 the visible parent said the value had not appeared. Redacted audit shape inspection confirmed that the hidden user message also carried a `requestId` cursor key. The marker and existing request identity were present; neither was recognized because the parser expected the hidden prefix at the start of the entire model-facing content.
 
 The reviewed host's user-message conversion adds an optional separate incoming-message-ID part and a timestamp, then encloses the original hidden text in `<user_query>`. The next runtime revision normalizes that single wrapper before recognizing a native completion, and strips it before sending completion text to either provider. The experimental formatter hook is removed because the existing host request identity is sufficient. Regression tests now use the observed wrapped shape, including timestamps and separate message-ID parts; quoted lookalikes, missing IDs, ordinary reminders, and ambiguous multiple query wrappers remain rejected. The full local suite passes 61 runtime tests, 15 patch tests, installer integration, 12 Windows tests, and 5 release checks. This correction still requires a live fresh-Bot pass.
+
+### `544ef2d` normalized completion candidate
+
+After stock restoration, the candidate installed successfully on official 0.36.0 at approximately 05:23. It verified six unique native commands for 23 Bots and channels before the host restart. A clean source archive also built and installed into an isolated Applications directory with signature verification.
+
+| Item | SHA-256 |
+| --- | --- |
+| Production source digest | `2a87b92a747b17f105172a22452d858bc82854d93605d22f86512358ae5bd90d` |
+| Clean source ZIP from `git archive 544ef2d` | `a7e6cf6ffb6ba83dcb18cb8a5f8a279be2800e333e2763a1e18f2107f9e5b0d5` |
+| Locally built Mac ZIP | `5eecdaa48e2f9c8d25a049da93ac7a9db5e17793cee77dc5ad45b9cca5e1e612` |
+
+A fresh Bot greeted at 05:24:08. Its real Codex child stored the final assistant result `48` for 6 × 8, independently verified in the child transcript. At 05:25:30 the parent said the result had not arrived yet; after the actual hidden completion arrived, the parent resumed and delivered one `CHILD_RETURN_OK 48` at 05:25:42. The audit recognized one automation completion in the resumed request and recorded `delivery-after-latest-input` after the final delivery. No second returned-result bubble appeared during subsequent inspection. The installed runtime SHA-256 matched the built source: `b457e8a1435a2f28545834bf6e737ed0b4d50678ca6b5dc2274d6e071bf77231`. This proves the repaired Codex returned-child path on this candidate and 0.36.0; it does not substitute for the remaining full acceptance gates.
+
+The same Bot switched to OpenRouter Claude at 05:26:56. Its real `Shell`, `Read`, and `Screenshot` receipts were recorded at 05:27:32, 05:27:35, and 05:27:36. The visible answer at 05:27:59 reported the exact file token and correctly identified the Terminal window. Independent inspection confirmed `/tmp/grokrouter-544-openrouter-proof.txt` contained exactly `OPENROUTER_OUTER_TOOL_OK\n`.
+
+The subsequent OpenRouter child probe used Grok's native `task` dispatch and produced a separate child transcript with final assistant text `72` for 8 × 9. The parent first reported waiting at 05:28:39 and then delivered one `OPENROUTER_CHILD_OK 72` at 05:28:44. A `delivery-after-latest-input` suppression followed; no second returned-result bubble appeared. All inspected outgoing tool-call IDs had the router-owned prefix. This probe used previously discovered orchestration schemas; the final fresh-Bot delegation check must still verify first-request discovery forcing with an explicit sub-agent request.
+
+The installed management Doctor independently reported `hostAdapterVerified: true`, `stockBackupVerified: true`, `ok: true`, `status: installed`, and supported version 0.36.0. Its process exit was 0, the runtime syntax check passed, Codex was signed in, and the protected OpenRouter credential had valid shape. The final exact-artifact lifecycle and full fresh-Bot acceptance were then started.
