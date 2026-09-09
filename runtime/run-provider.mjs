@@ -755,7 +755,7 @@ async function openRouterToolResults(message) {
   return converted;
 }
 
-async function pendingBackgroundAgentIds(messages) {
+function pendingBackgroundAgentIds(messages) {
   const boundary = latestInputBoundaryIndex(messages);
   const launches = new Set();
   const pending = new Set();
@@ -784,11 +784,19 @@ async function pendingBackgroundAgentIds(messages) {
         if (orchestrationName(name)) launches.add(call.id);
       }
     }
-    for (const result of await openRouterToolResults(message)) {
-      if (!launches.has(result.tool_call_id)) continue;
-      const id = backgroundId(result.content);
-      if (id) pending.add(id);
-    }
+    // Read the authoritative structured result, not its provider rendering.
+    // Grok may also attach experimental_content with a duplicate text view;
+    // concatenating both produces invalid JSON and loses the native receipt.
+    const inspectResults = (value, depth = 0) => {
+      if (depth > 10 || value == null || typeof value !== "object") return;
+      if (normalizedPartType(value) === "tool-result" && launches.has(partToolCallId(value))) {
+        const id = backgroundId(value.result ?? value.output);
+        if (id) pending.add(id);
+        return;
+      }
+      for (const child of Array.isArray(value) ? value : Object.values(value)) inspectResults(child, depth + 1);
+    };
+    inspectResults(message);
   }
   return [...pending];
 }
@@ -2303,7 +2311,7 @@ export async function runTurn(input, dependencies = {}) {
     Object.assign(state, updated);
   }
   const effectiveTools = toolsFromHost.length ? toolsFromHost : actionableTools(state.tools);
-  const pendingBackgroundIds = await pendingBackgroundAgentIds(messages);
+  const pendingBackgroundIds = pendingBackgroundAgentIds(messages);
   const turnConfig = {
     ...config,
     provider: state.provider,

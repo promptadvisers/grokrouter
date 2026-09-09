@@ -2479,7 +2479,7 @@ test("running child receipts cannot deliver inferred results and actual completi
   const launched = [
     user("Delegate one calculation and wait for its actual completed result."),
     { role: "assistant", content: [{ type: "tool-call", toolCallId: "launch-one", toolName: "CallDynamicTool", args: { toolName: "Task", arguments: { prompt: "8 times 7" } } }] },
-    { role: "tool", content: [{ type: "tool-result", toolCallId: "launch-one", result: { result: { success: { agentId: "sand-subagent-fixture-one", isBackgrounded: true, durationMs: "738" } } } }] },
+    { role: "tool", content: [{ type: "tool-result", toolCallId: "launch-one", result: { result: { success: { agentId: "sand-subagent-fixture-one", isBackgrounded: true, durationMs: "738" } } }, experimental_content: [{ type: "text", text: "Background task launched; this duplicate display text is not the structured receipt." }] }] },
   ];
   try {
     for (const provider of ["openrouter", "codex"]) {
