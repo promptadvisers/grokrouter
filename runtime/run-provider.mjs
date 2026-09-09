@@ -145,6 +145,17 @@ export function latestUserText(messages) {
   return "";
 }
 
+function isAutomaticGreeting(messages) {
+  if (latestAutomationCompletion(messages) || toolResultCallIds(messages).size > 0) return false;
+  const latest = [...messages].reverse().find((message) => ["user", "human"].includes(messageRole(message)));
+  // The host also sends its procedure as a user-role context message. That
+  // context is not a human request and must not hide the explicit first run.
+  const requestId = latest?.providerOptions?.cursor?.requestId;
+  if (typeof requestId === "string" && requestId.trim()
+      && /^\[SAND_HIDDEN_PROMPT\]\[first run\](?:\s|$)/.test(hiddenCompletionContent(latest))) return true;
+  return !latestUserText(messages);
+}
+
 const ROUTER_CONTROL_PREFIX = /^\/(?:providers?|models?|reasoning|router|doctor)(?:\s|$)/i;
 
 export function addressedRouterControlText(input) {
@@ -1123,9 +1134,7 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
   const convertedMessages = await openRouterMessages(messages);
   const visibleUserText = latestUserText(messages);
   const directTextOnly = /\b(?:reply|respond|answer)\s+with\s+exactly\b/i.test(visibleUserText);
-  const automaticGreeting = !visibleUserText
-    && !latestAutomationCompletion(messages)
-    && toolResultCallIds(messages).size === 0;
+  const automaticGreeting = isAutomaticGreeting(messages);
   const offeredTools = directTextOnly || automaticGreeting ? [] : normalizedTools;
   const currentUserIndex = latestUserIndex(messages);
   const currentTurnHasToolResult = currentUserIndex >= 0
@@ -1351,9 +1360,7 @@ function codexOutputSchema(allowTools = true) {
 
 function codexPrompt(config, messages, tools, resuming) {
   const normalized = normalizeTools(tools);
-  const greeting = !latestUserText(messages)
-    && !latestAutomationCompletion(messages)
-    && toolResultCallIds(messages).size === 0;
+  const greeting = isAutomaticGreeting(messages);
   const preparedMessages = codexTranscriptMessages(messages);
   const transcript = sanitizedTranscript(resuming ? preparedMessages.slice(-20) : preparedMessages);
   return [
@@ -1435,9 +1442,7 @@ export async function runCodex(config, messages, tools, codexFactory = null) {
   // remote npm download at all.
   const codex = codexFactory ? codexFactory() : await createCodexClient(config);
   const options = codexThreadOptions(config);
-  const greeting = !latestUserText(messages)
-    && !latestAutomationCompletion(messages)
-    && toolResultCallIds(messages).size === 0;
+  const greeting = isAutomaticGreeting(messages);
   const offeredTools = greeting ? [] : tools;
   const outputSchema = codexOutputSchema(!greeting);
   let resuming = Boolean(config.codexThreadId);

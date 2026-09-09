@@ -1070,6 +1070,36 @@ test("Codex greetings cannot dispatch dynamic tools, including malformed output 
   }
 });
 
+test("the native first-run envelope overrides preceding user-role host context for both providers", async () => {
+  const messages = [
+    { role: "system", content: "Host instructions" },
+    { role: "user", content: "Host procedure: discover available tools when useful.", providerOptions: { cursor: { omitCloudWorkerProcedure: false, requestContextCompleteness: "complete" } } },
+    { role: "user", content: [{ type: "text", text: "[incoming-id]" }, { type: "text", text: "The current time is 06:39 UTC.\n<user_query>\n[SAND_HIDDEN_PROMPT][first run] This is your very first turn. The user has not sent a message yet.\n</user_query>" }], providerOptions: { cursor: { requestId: "native-first-run" } } },
+  ];
+  const tools = [{ name: "GetDynamicTools", inputSchema: { type: "object" } }];
+  const runs = [];
+  const thread = { id: "native-greeting", run: async (input, options) => { runs.push({ input, options }); return { finalResponse: JSON.stringify({ text: "Hello!", toolCalls: [] }) }; } };
+  await runCodex({}, messages, tools, () => ({ startThread: () => thread }));
+  assert.equal(runs[0].options.outputSchema.properties.toolCalls.maxItems, 0);
+  assert.match(runs[0].input, /automatic new-Bot greeting/);
+  await runCodex({}, [...messages, user("Use the outer GetDynamicTools tool for my task.")], tools, () => ({ startThread: () => thread }));
+  assert.equal(runs[1].options.outputSchema.properties.toolCalls.maxItems, 4);
+  assert.doesNotMatch(runs[1].input, /automatic new-Bot greeting/);
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  try {
+    await runOpenRouter({}, messages, tools, async (_, init) => {
+      const body = JSON.parse(init.body);
+      assert.equal(body.tools, undefined);
+      assert.match(body.messages[0].content, /automatic new-Bot greeting/);
+      return new Response(JSON.stringify({ choices: [{ message: { content: "Hello!" } }] }), { status: 200 });
+    });
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+  }
+});
+
 test("OpenRouter reports an invalid key stored in Grok Secrets", async () => {
   const previous = process.env.OPENROUTER_API_KEY;
   delete process.env.OPENROUTER_API_KEY;
