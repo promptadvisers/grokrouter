@@ -2225,3 +2225,47 @@ test('Codex empty recovery preserves an actual tagged child result and deduplica
     assert.equal(events.at(-1).reason,'automation-continuation-already-claimed-or-processed');
   } finally {await rm(root,{recursive:true,force:true});}
 });
+
+test('failed direct and brokered delivery receipts do not count as delivered answers', () => {
+  const query=user('Finish this task');
+  const call={role:'assistant',content:[{type:'tool-call',toolCallId:'failed-broker',toolName:'CallDynamicTool',args:{toolName:'send_message',arguments:{}}}]};
+  const failure={role:'tool',content:[{type:'tool-result',toolCallId:'failed-broker',result:{error:{error:'Invalid arguments: type: Required'}}}]};
+  assert.equal(hasDeliveryAfterLatestQuery([query,call,failure]),false);
+  const direct={role:'assistant',content:[{type:'tool-call',toolCallId:'grokbot-router-send-failed',toolName:'SendToUser',args:{type:'text',content:'Answer'}}]};
+  for (const outcome of [{result:{error:'Delivery failed'}},{isError:true,result:'failed'},{is_error:true,result:'failed'},{output:{type:'error-text',value:'failed'}},{output:{type:'json',value:{success:false}}}]) {
+    assert.equal(hasDeliveryAfterLatestQuery([query,direct,{role:'tool',content:[{type:'tool-result',toolCallId:'grokbot-router-send-failed',...outcome}]}]),false);
+  }
+  assert.equal(hasDeliveryAfterLatestQuery([query,call,{role:'tool',content:[{type:'tool-result',toolCallId:'failed-broker',result:{success:{messageId:'delivered'}}}]}]),true);
+});
+
+for (const automation of [false,true]) {
+  test(`${automation ? 'a completed child' : 'a normal answer'} can recover one failed delivery without replaying the same receipt`, async () => {
+    const root=await mkdtemp(join(tmpdir(),'grokrouter-failed-delivery-'));
+    let calls=0;
+    try {
+      const config={provider:'codex',providers:['codex'],statePath:join(root,'states.json'),auditPath:join(root,'audit.jsonl')};
+      const messages=[user('Return the result')];
+      if (automation) messages.push({role:'user',content:'[SAND_HIDDEN_PROMPT]Child finished: 72',providerOptions:{cursor:{sandAutomationCompletionId:'delivery-child'}}});
+      const sessionOptions={botId:'failed-delivery-parent'};
+      const thread={id:'delivery-thread',run:async()=>{calls++;return {finalResponse:JSON.stringify({text:'RESULT_72',toolCalls:[]}),usage:{}};}};
+      const dependencies={codexFactory:()=>({startThread:()=>thread,resumeThread:()=>thread})};
+      assert.equal((await runTurn({config,messages,sessionOptions},dependencies)).text,'RESULT_72');
+      const failureMessages=[...messages,
+        {role:'assistant',content:[{type:'tool-call',toolCallId:'grokbot-router-send-attempt-one',toolName:'SendToUser',args:{type:'text',content:'RESULT_72'}}]},
+        {role:'tool',content:[{type:'tool-result',toolCallId:'grokbot-router-send-attempt-one',result:{error:{error:'delivery rejected'}}}]},
+      ];
+      assert.equal((await runTurn({config,messages:failureMessages,sessionOptions},dependencies)).text,'RESULT_72');
+      assert.equal(calls,2);
+      assert.equal((await runTurn({config,messages:failureMessages,sessionOptions},dependencies)).alreadyDelivered,true);
+      assert.equal(calls,2);
+      const successMessages=[...failureMessages,
+        {role:'assistant',content:[{type:'tool-call',toolCallId:'grokbot-router-send-attempt-two',toolName:'SendToUser',args:{type:'text',content:'RESULT_72'}}]},
+        {role:'tool',content:[{type:'tool-result',toolCallId:'grokbot-router-send-attempt-two',result:{success:{messageId:'actual-visible-result'}}}]},
+      ];
+      assert.equal((await runTurn({config,messages:successMessages,sessionOptions},dependencies)).alreadyDelivered,true);
+      assert.equal(calls,2);
+      const events=(await readFile(config.auditPath,'utf8')).trim().split('\n').map(JSON.parse);
+      assert.equal(events.at(-1).reason,'delivery-after-latest-input');
+    } finally {await rm(root,{recursive:true,force:true});}
+  });
+}

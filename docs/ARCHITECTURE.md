@@ -58,7 +58,7 @@ Tool authority always flows from Grok outward:
 4. The host executor returns the structured request to Grok. It does not perform the action itself.
 5. Grok applies its existing permission behavior and performs the computer, file, browser or orchestration action.
 6. The matching host result appears in a later transcript invocation. The runtime normalizes it and resumes the same provider thread.
-7. The provider's final text is delivered once through an offered assistant-delivery tool. Sessions without that tool, including native children, finish through the normal response stream so Grok can collect their final text.
+7. Parent replies use Grok's canonical assistant-delivery handler. Native child sessions, identified by the host's `isSubagent` flag, finish through the response stream so Grok can collect their final text. A failed delivery result is not a completed answer; its durable receipt permits one recovery without replaying that receipt indefinitely.
 
 Printed pseudo-tool syntax is not authority. The guarded OpenRouter compatibility parser can recover a model's textual dialect only when it maps to the exact schema Grok offered for that turn. If Grok supplied no actionable schema, the text remains inert. This is why the latest OpenRouter Shell gate is correctly recorded as blocked rather than presented as tool parity.
 

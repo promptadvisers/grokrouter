@@ -85,7 +85,9 @@ function serializeGrokBotRouterTools(tools) {
     return [{ name, description, parameters }];
   });
 }
-function getGrokBotRouterSendToolName(tools) {
+function getGrokBotRouterSendToolName(tools, sessionOptions = {}) {
+  // A native child's result belongs in finalAssistantText, not a user bubble.
+  if (sessionOptions.isSubagent === true) return null;
   const names = serializeGrokBotRouterTools(tools).map((tool) => tool.name);
   // SendToUser is Grok Bot's canonical terminal-delivery tool. Its turn
   // runtime treats similarly named aliases as silent work and launches a
@@ -93,9 +95,9 @@ function getGrokBotRouterSendToolName(tools) {
   for (const name of ["SendToUser", "SendMessage", "SendUser"]) {
     if (names.includes(name)) return name;
   }
-  // Child sessions can finish through the response stream without exposing a
-  // user-delivery tool. Inventing one discards their finalAssistantText.
-  return null;
+  // The exact supported parent runner handles this canonical delivery tool
+  // even when it omits internal delivery schemas from inference tools.
+  return "SendToUser";
 }
 function getGrokBotRouterChildEnv() {
   const names = [
@@ -222,7 +224,7 @@ var GrokBotRouterPromptExecutor = class extends MockPromptExecutor {
         }), messages);
         return delegate.stream(ctx, invocationId, tools, options);
       }
-      const sendToolName = getGrokBotRouterSendToolName(tools);
+      const sendToolName = getGrokBotRouterSendToolName(tools, this.sessionOptions);
       const fallbackToolCalls = providerToolCalls.length > 0 || !sendToolName ? [] : [{
         toolCallId: `grokbot-router-send-${require("node:crypto").randomUUID()}`,
         toolName: sendToolName,

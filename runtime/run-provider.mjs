@@ -377,7 +377,7 @@ export function automationContinuationSignature(messages) {
     }
   }
   return createHash("sha256")
-    .update([completion.id, ...toolResultIds].join("\0"))
+    .update([completion.id, ...toolResultIds, ...failedDeliveryReceiptIds(messages)].join("\0"))
     .digest("hex");
 }
 
@@ -394,6 +394,43 @@ function isDeliveryToolCall(call) {
   let args;
   try { args = JSON.parse(call.function?.arguments || '{}'); } catch { return false; }
   return deliveries.has(normalize(args?.toolName));
+}
+
+function failedToolResultCallIds(value, failures = new Set(), depth = 0, seen = new Set()) {
+  if (depth > 10 || value == null || typeof value !== "object" || seen.has(value)) return failures;
+  seen.add(value);
+  if (normalizedPartType(value) === "tool-result" && partToolCallId(value)) {
+    const outcome = value.result ?? value.output;
+    const hasError = (item) => item && typeof item === "object" && (
+      item.isError === true || item.is_error === true || item.success === false
+      || (item.error !== undefined && item.error !== null && item.error !== false)
+      || ["error-text", "error-json"].includes(item.type)
+    );
+    if (hasError(value) || hasError(outcome) || hasError(outcome?.value)) failures.add(partToolCallId(value));
+  }
+  for (const child of Array.isArray(value) ? value : Object.values(value)) {
+    failedToolResultCallIds(child, failures, depth + 1, seen);
+  }
+  return failures;
+}
+
+function failedDeliveryReceiptIds(messages) {
+  const boundary = latestInputBoundaryIndex(messages);
+  const deliveryCalls = new Set();
+  const failed = new Set();
+  for (let index = Math.max(0, boundary + 1); index < messages.length; index += 1) {
+    const message = messages[index];
+    if (messageRole(message) === "assistant") {
+      const content = message?.content ?? message?.message?.content ?? message?.data?.content;
+      for (const call of toolCallsFromGrokContent(content)) {
+        if (isDeliveryToolCall(call)) deliveryCalls.add(call.id);
+      }
+    }
+    for (const id of failedToolResultCallIds(message)) {
+      if (deliveryCalls.has(id)) failed.add(id);
+    }
+  }
+  return [...failed].sort();
 }
 
 export function hasDeliveryAfterLatestQuery(messages) {
@@ -419,7 +456,9 @@ export function hasDeliveryAfterLatestQuery(messages) {
   for (let index = startIndex; index < messages.length; index += 1) {
     const message = messages[index];
     const resultIds = toolResultCallIds(message);
+    const failedResultIds = failedToolResultCallIds(message);
     if ([...resultIds].some((id) => {
+      if (failedResultIds.has(id)) return false;
       const origin = sendCallOrigins.get(id);
       if (origin !== undefined) return queryIndex < 0 || origin > queryIndex;
       // A transcript with no visible input boundary can contain only the
@@ -439,7 +478,7 @@ export function hasDeliveryAfterLatestQuery(messages) {
     }
     const parts = Array.isArray(content) ? content : [content];
     const visibleText = parts
-      .filter((part) => !["reasoning", "redacted-reasoning", "reasoning-details"].includes(normalizedPartType(part)))
+      .filter((part) => !["reasoning", "redacted-reasoning", "reasoning-details", "tool-call", "tool-result"].includes(normalizedPartType(part)))
       .map((part) => collectText(part))
       .filter(Boolean)
       .join("\n")
@@ -1095,6 +1134,7 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
           "The in-chat commands /provider, /models, /model, /reasoning, and /router are real and are handled before model inference.",
           "If asked which provider or model is active, use these router facts. Never deny or invent router commands.",
           "Use an outer Grok tool only when the user's task actually requires it. A literal or exact-text reply must be answered directly without tools.",
+          "Return your final answer to this conversation directly as content; the router delivers it. Do not discover or call a message-delivery tool merely to send that final answer.",
           ...(offeredTools.length ? [
             `The only Grok tools available in this turn are: ${offeredTools.map((tool) => tool.function.name).join(", ")}.`,
             "Invoke an available tool only through the API's native tool-calling field. Never print or narrate tool-call markup such as to=functions, code:, or JSON arguments as assistant text.",
@@ -1990,7 +2030,13 @@ export async function runTurn(input, dependencies = {}) {
   const tools = Array.isArray(input.tools) ? input.tools : [];
   const sessionOptions = input.sessionOptions && typeof input.sessionOptions === "object" ? input.sessionOptions : {};
   const { state, key, identity } = await stateForTurn(config, messages, sessionOptions);
-  const turnFingerprint = userTurnFingerprint(messages);
+  const userFingerprint = userTurnFingerprint(messages);
+  const failedDeliveries = failedDeliveryReceiptIds(messages);
+  // A newly failed delivery reopens this input exactly once per durable
+  // receipt. Replays of the same failure still share the normal turn lock.
+  const turnFingerprint = userFingerprint && failedDeliveries.length
+    ? createHash("sha256").update([userFingerprint, "failed-delivery", ...failedDeliveries].join("\0")).digest("hex")
+    : userFingerprint;
   const automationContinuation = latestAutomationCompletionIndex(messages) > latestUserIndex(messages);
   const continuationSignature = automationContinuation
     ? automationContinuationSignature(messages)

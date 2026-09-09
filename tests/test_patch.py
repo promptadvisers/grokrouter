@@ -106,7 +106,7 @@ class RouterPatchTests(unittest.TestCase):
         self.assertNotIn("grokbot router delivery complete", self.host.read_text())
         self.assertNotIn("new SandRunAbortError", self.host.read_text())
         self.assertIn('for (const name of ["SendToUser", "SendMessage", "SendUser"])', self.host.read_text())
-        self.assertNotIn('return "SendToUser";', self.host.read_text())
+        self.assertIn('return "SendToUser";', self.host.read_text())
         self.assertIn('{ botId: typeof boxId === "string"', self.host.read_text())
         self.assertEqual(self.host.read_text().count('{ botId: typeof boxId === "string"'), 1)
         self.assertIn('grokBotRouterControlText: rawTranscriptText', self.host.read_text())
@@ -143,8 +143,8 @@ class MockPromptExecutor {
 (async () => {
   let nextResult = { text: "56", toolCalls: [], usage: {} };
   runGrokBotRouter = async () => nextResult;
-  const execute = async (tools) => {
-    const executor = new GrokBotRouterPromptExecutor({}, {isSubagent:true}, []);
+  const execute = async (tools, isSubagent = true) => {
+    const executor = new GrokBotRouterPromptExecutor({}, {isSubagent}, []);
     return await executor.stream({}, "probe", tools, {}).response;
   };
   const child = await execute([{name:"Shell"}, {name:"Read"}]);
@@ -153,12 +153,18 @@ class MockPromptExecutor {
   const emptySchema = await execute([]);
   assert.equal(emptySchema.response, "56");
   assert.deepEqual(emptySchema.toolCalls, []);
-  const parent = await execute([{name:"SendMessage"}, {name:"SendToUser"}]);
+  const parent = await execute([{name:"SendMessage"}, {name:"SendToUser"}], false);
   assert.equal(parent.response, "");
   assert.equal(parent.toolCalls.length, 1);
   assert.equal(parent.toolCalls[0].toolName, "SendToUser");
   assert.match(parent.toolCalls[0].toolCallId, /^grokbot-router-send-/);
   assert.equal(parent.toolCalls[0].args.content, "56");
+  const parentInternal = await execute([{name:"Shell"}], false);
+  assert.equal(parentInternal.response, "");
+  assert.equal(parentInternal.toolCalls[0].toolName, "SendToUser");
+  const childWithDelivery = await execute([{name:"SendToUser"}]);
+  assert.equal(childWithDelivery.response, "56");
+  assert.deepEqual(childWithDelivery.toolCalls, []);
   nextResult = {text:"Working",toolCalls:[{toolName:"Shell",toolCallId:"actual-call",args:{command:"true"}}]};
   const toolTurn = await execute([{name:"Shell"}]);
   assert.equal(toolTurn.response, "");
