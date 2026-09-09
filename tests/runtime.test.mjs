@@ -1442,6 +1442,18 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
     assert.match(nativeProvider.text, /Switched this bot from OpenRouter/);
     assert.equal(nativeProvider.control, true);
 
+    const reasoningInput = (text) => ({config, messages: [user(text)], sessionOptions: {botId: "native-workflow-bot"}});
+    const initialReasoning = await runTurn(reasoningInput("/reasoning"), {fetchImpl: neverInfer});
+    assert.match(initialReasoning.text, /Reasoning effort: medium/);
+    assert.equal(initialReasoning.control, true);
+    await runTurn(reasoningInput("/reasoning high"), {fetchImpl: neverInfer});
+    const reasoningRecipe = (await readFile(new URL('../skills/reasoning/SKILL.md', import.meta.url), 'utf8')).replace(/^---[\s\S]*?---\s*/, '').trim();
+    const expandedReasoning = `[t2u]\nThe user invoked the "reasoning" skill (folder reasoning). Run it now.\nWhat it does: Show or change reasoning effort.\nRecipe to follow:\n${reasoningRecipe}\nCarry out the recipe now, adapting it to anything else the user said in this message.\n\n@reasoning`;
+    const shownReasoning = await runTurn(reasoningInput(`<user_query>${expandedReasoning}</user_query>`), {fetchImpl: neverInfer});
+    assert.match(shownReasoning.text, /Reasoning effort: high/);
+    assert.equal(shownReasoning.control, true);
+    assert.equal(shownReasoning.usage.inputTokens, 0);
+
     const pluralAlias = await runTurn({
       config,
       messages: [user("/models openai/gpt-5.6-luna")],

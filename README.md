@@ -54,6 +54,7 @@ The ZIP alternative is **Code → Download ZIP → Install GrokRouter.command**.
 | `/models` | List configured models and switching instructions |
 | `/model vendor/model` or `/models vendor/model` | Select a model explicitly |
 | A listed `vendor/model` ID by itself | Select that model |
+| `/reasoning` | Show this Bot's current reasoning effort |
 | `/reasoning low`, `/reasoning medium`, `/reasoning high` | Change a supported reasoning setting |
 | `/doctor` or `/router doctor` | Check routing health |
 | `/router reset` | Reset the Bot's provider thread while retaining its Grok transcript |

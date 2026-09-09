@@ -1921,6 +1921,9 @@ async function controlResult(config, key, state, input) {
   if (command === "/provider" || command === "/router" || command === "/router status") {
     return result(`${providerLabel(state.provider)} is active for this bot. Model: ${state.model}. Reasoning: ${state.reasoning}.`);
   }
+  if (command === "/reasoning") {
+    return result(`Reasoning effort: ${state.reasoning}. Change it with /reasoning minimal|low|medium|high|xhigh.`);
+  }
   if (command === "/router help" || command === "/providers") {
     return result([
       "GrokRouter controls:",
@@ -1931,6 +1934,7 @@ async function controlResult(config, key, state, input) {
       "• /models <id> — also switches (forgiving alias)",
       "• paste a listed vendor/model ID by itself — also switches",
       "• /reasoning minimal|low|medium|high|xhigh — change effort",
+      "• /reasoning — show current effort",
       "• /router reset — start a fresh provider thread",
       "• /router doctor — show installation health",
       "• /doctor — show the same installation health",

@@ -7,6 +7,7 @@
 - Keeps an unrelated explicit user query from being replaced by a retained workflow definition.
 - Adds separately gated official Grok Bot 0.36.0 compatibility, version-specific signed registries, and macOS vendor-signature verification.
 - Parses expanded native skill-menu invocations and preserves per-Bot settings, saved threads, receipts, and audit history during runtime replacement.
+- Makes the native Reasoning entry show the current effort when invoked without an argument.
 - Repairs brokered delivery detection, failed-delivery recovery, parent/child completion, Codex empty-response recovery, and management Doctor exit status.
 - Gives native command registration time to load its workflow library while keeping ordinary diagnostic requests bounded.
 - Builds Windows packages with the Electron version pinned in their manifest.
