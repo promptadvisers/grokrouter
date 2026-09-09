@@ -1158,6 +1158,36 @@ test("a channel control suppresses host-shaped follow-on turns across Bots", asy
   }
 });
 
+test("channel receipt suppression cannot cross request roots or swallow a fresh control", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokrouter-channel-scoping-"));
+  const config = {
+    provider: "codex", providers: ["codex", "openrouter"],
+    statePath: join(root, "states.json"), auditPath: join(root, "audit.jsonl"),
+    channelControlLatchPath: join(root, "latch.json"),
+  };
+  const envelope = user("# GrokRouter provider\nGROKROUTER_NATIVE_CONTROL: PROVIDER");
+  const options = (id, request) => ({ botId: id, skipLabeling: true, lineage: { rootParentRequestId: request } });
+  try {
+    await runTurn({ config, messages: [envelope], sessionOptions: options("one", "first") });
+    const independent = await runTurn({ config, messages: [envelope], sessionOptions: options("two", "second") });
+    assert.equal(independent.control, true);
+    assert.match(independent.text, /Codex SDK is active/);
+    const fresh = await runTurn({ config, messages: [envelope, user("/provider openrouter")], sessionOptions: options("one", "first") });
+    assert.equal(fresh.control, true);
+    assert.equal(fresh.provider, "openrouter");
+    const numeric = await runTurn({ config, messages: [envelope], sessionOptions: options("three", 42) });
+    assert.equal(numeric.control, true);
+    const followOn = await runTurn({ config, messages: [envelope], sessionOptions: options("four", 42) });
+    assert.equal(followOn.alreadyDelivered, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("a workflow definition cannot replace an unrelated explicit user query", () => {
+  assert.equal(nativeWorkflowControlText([user(
+    "# GrokRouter provider\nGROKROUTER_NATIVE_CONTROL: PROVIDER\n<user_query>Explain provider pricing</user_query>"
+  )]), "");
+});
+
 test("group identity changes do not discard a previously combined-ID router state", async () => {
   const root = await mkdtemp(join(tmpdir(), "grokbot-router-group-migration-"));
   const stateDirectory = join(root, "states");
@@ -1310,7 +1340,8 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
       messages: [user("# GrokRouter Doctor\n\nGROKROUTER_NATIVE_COMMAND: /doctor\n\n<user_query>doctor</user_query>")],
       sessionOptions: { botId: "native-workflow-bot" },
     }, { fetchImpl: neverInfer });
-    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.46: OK/);
+    const release = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+    assert.ok(nativeDoctor.text.startsWith(`Router ${release.version}: OK`));
     assert.equal(nativeDoctor.control, true);
 
     const nativeProvider = await runTurn({

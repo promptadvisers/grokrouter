@@ -1,3 +1,15 @@
+# GrokRouter 0.1.0-beta.47 — unreleased candidate
+
+- Restores exact reviewed host hash and byte-count verification. Structural diagnostics cannot authenticate a stock host.
+- Rejects an unknown or foreign live host even when a trusted old backup exists. Automatic repair cannot silently replace a newer incompatible host.
+- Reconstructs supported published adapters from trusted originals before upgrading. Doctor now detects tampered adapter contents, not just marker presence.
+- Scopes channel-control receipts to the originating host request and keeps fresh commands ahead of follow-on suppression. Unrelated conversations remain independent.
+- Keeps an unrelated explicit user query from being replaced by a retained workflow definition.
+- Makes source tagging depend on CI and a versioned acceptance record tied to the candidate's source digest. Keeps the existing download link until the new tag is available.
+- Adds CodeQL analysis, release validation tests, and clearer compatibility/recovery documentation.
+
+Live acceptance, newer Grok Bot compatibility, and final publication remain pending. No new platform or tool capability is claimed from these source changes.
+
 # GrokRouter 0.1.0-beta.46
 
 Installs on rotating Grok Bot 0.30.0 host builds without a per-hash approval.

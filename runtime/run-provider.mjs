@@ -8,7 +8,7 @@ const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGES_PER_TURN = 4;
 const MAX_TOOLS = 128;
-const ROUTER_VERSION = "0.1.0-beta.46";
+const ROUTER_VERSION = "0.1.0-beta.47";
 const COMPLETED_TURN_TTL_MS = 15 * 60_000;
 const ACTIVE_TURN_TTL_MS = 15 * 60_000;
 const CHANNEL_CONTROL_LATCH_TTL_MS = 30_000;
@@ -279,7 +279,11 @@ export function nativeWorkflowControlText(messages) {
     const commandName = base.slice(1);
     const visible = extractUserQuery(raw).trim();
     const selected = visible.match(new RegExp(`^/?${commandName}(?:\\s+([\\s\\S]+))?$`, "i"));
-    if (!selected) return base;
+    if (!selected) {
+      // A retained definition does not authorize a different visible request.
+      if (visible && visible !== raw.trim()) return "";
+      return base;
+    }
     const argument = String(selected[1] || "").trim();
     return argument ? `${base} ${argument}` : base;
   }
@@ -1682,33 +1686,45 @@ async function appendAudit(config, event) {
   }
 }
 
-function channelControlLatchPath(config) {
-  return config.channelControlLatchPath || join(runtimeDirectory, "channel-control-latch.json");
+function channelControlKey(sessionOptions) {
+  const root = sessionOptions.lineage?.rootParentRequestId;
+  if (typeof root !== "string" && typeof root !== "number") return "";
+  if (!String(root).trim()) return "";
+  return createHash("sha256").update(String(root)).digest("hex");
 }
 
-async function channelControlLatch(config) {
-  try {
-    return JSON.parse(await readFile(channelControlLatchPath(config), "utf8"));
-  } catch {
-    return {};
-  }
+function channelControlLatchPath(config, sessionOptions) {
+  const key = channelControlKey(sessionOptions);
+  if (!key) return "";
+  const base = config.channelControlLatchPath || join(runtimeDirectory, "channel-control-latch.json");
+  return `${base}.${key}`;
 }
 
-async function rememberChannelControl(config) {
+async function rememberChannelControl(config, sessionOptions) {
+  const pathname = channelControlLatchPath(config, sessionOptions);
+  if (!pathname) return;
+  const temporary = `${pathname}.${randomUUID()}.tmp`;
   try {
-    const pathname = channelControlLatchPath(config);
-    const now = Date.now();
     await mkdir(dirname(pathname), { recursive: true });
-    await writeFile(pathname, JSON.stringify({ completedAt: now }), { mode: 0o600 });
+    await writeFile(temporary, JSON.stringify({ completedAt: Date.now() }), { mode: 0o600 });
+    await rename(temporary, pathname);
   } catch {
-    // A receipt latch improves channel hygiene but must never break a control.
+    // An unavailable receipt cannot break a deterministic control.
+  } finally {
+    await rm(temporary, { force: true }).catch(() => {});
   }
 }
 
-async function hasRecentChannelControl(config) {
-  const value = await channelControlLatch(config);
-  const completedAt = Number(value?.completedAt || 0);
-  return completedAt > 0 && Date.now() - completedAt < CHANNEL_CONTROL_LATCH_TTL_MS;
+async function hasRecentChannelControl(config, sessionOptions) {
+  const pathname = channelControlLatchPath(config, sessionOptions);
+  if (!pathname) return false;
+  try {
+    const value = JSON.parse(await readFile(pathname, "utf8"));
+    const age = Date.now() - Number(value?.completedAt || 0);
+    if (age >= 0 && age < CHANNEL_CONTROL_LATCH_TTL_MS) return true;
+    await rm(pathname, { force: true });
+  } catch {}
+  return false;
 }
 
 function isChannelControlFollowOn(sessionOptions) {
@@ -1716,7 +1732,7 @@ function isChannelControlFollowOn(sessionOptions) {
     && sessionOptions.grokBotRouterControlText.trim();
   return !hasFreshRawUserText
     && Object.prototype.hasOwnProperty.call(sessionOptions, "skipLabeling")
-    && typeof sessionOptions.lineage?.rootParentRequestId === "string";
+    && Boolean(channelControlKey(sessionOptions));
 }
 
 function providerLabel(provider) {
@@ -1992,24 +2008,27 @@ export async function runTurn(input, dependencies = {}) {
       return suppressed("automation-continuation-already-claimed-or-processed");
     }
   }
-  if (!automationContinuation
-      && isChannelControlFollowOn(sessionOptions)
-      && await hasRecentChannelControl(config)) {
-    return suppressed("channel-control-follow-on");
-  }
   const latestVisibleControl = structuredRouterControlText(messages)
     || addressedRouterControlText(latestUserText(messages));
-  const controlText = hostRouterControlText(messages, sessionOptions)
-    || (ROUTER_CONTROL_PREFIX.test(latestVisibleControl) ? latestVisibleControl : "")
+  const explicitControl = hostRouterControlText(messages, sessionOptions)
+    || (ROUTER_CONTROL_PREFIX.test(latestVisibleControl) ? latestVisibleControl : "");
+  if (!automationContinuation
+      && !explicitControl
+      && isChannelControlFollowOn(sessionOptions)
+      && await hasRecentChannelControl(config, sessionOptions)) {
+    return suppressed("channel-control-follow-on");
+  }
+  const controlText = explicitControl
     || nativeWorkflowControlText(messages)
     || latestVisibleControl;
   const control = automationContinuation
     ? null
     : await controlResult(config, key, state, controlText);
   if (control) {
-    await rememberChannelControl(config);
+    await rememberChannelControl(config, sessionOptions);
     await appendAudit(config, {
       event: "control_turn",
+      controlCommand: String(controlText || "").split(/\s+/, 1)[0],
       sessionId: state.sessionId,
       identitySource: identity.source,
       identityFields: identity.fields,

@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches: [main]
@@ -20,6 +21,8 @@ jobs:
           cache-dependency-path: runtime/package-lock.json
       - name: Install pinned runtime dependencies
         run: npm ci --prefix runtime --ignore-scripts --no-audit --no-fund
+      - name: Verify release version consistency
+        run: node scripts/verify-release.mjs
       - name: Test all layers
         run: npm test
       - name: Build ad-hoc beta installer

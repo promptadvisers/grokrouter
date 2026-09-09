@@ -93,7 +93,7 @@ grep -Fq 'printf %s \(failurePayload) | base64 -d; echo $code' "$PROJECT_ROOT/in
 grep -q 'INSTALLFAILED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Copy safe diagnostics' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'complete host fingerprint is included' "$PROJECT_ROOT/remote/install.sh"
-grep -q 'anchor-verified stock host' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'exact signed compatibility list' "$PROJECT_ROOT/remote/install.sh"
 grep -q 'HOSTSHA1=' "$PROJECT_ROOT/patch/router_patch.py"
 grep -q 'HOSTTRUST=' "$PROJECT_ROOT/patch/router_patch.py"
 grep -q '"anchorVerifiedHosts"' "$PROJECT_ROOT/patch/manifests/0.30.0.json"
@@ -146,15 +146,7 @@ grep -q 'ROUTER_BUILD_APP_ONLY' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 grep -q 'GROKROUTER_APPLICATIONS_DIR' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'GROKROUTER_NO_OPEN' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'xcode-select --install' "$PROJECT_ROOT/scripts/install-macos.sh"
-grep -q 'SOURCE_REF="source-v0.1.0-beta.46"' "$PROJECT_ROOT/scripts/install-macos.sh"
-grep -q 'source-v0.1.0-beta.46/scripts/install-macos.sh' "$PROJECT_ROOT/README.md"
-grep -Fq 'The slash menu is not the test.' "$PROJECT_ROOT/README.md"
-grep -Fq 'Fastest recovery: let Codex test the apps for you' "$PROJECT_ROOT/README.md"
-grep -Fq 'If Computer Use is available' "$PROJECT_ROOT/README.md"
-grep -Fq 'prove it in a genuinely new Bot created after the final install or repair' "$PROJECT_ROOT/README.md"
-grep -Fq 'The version is correct, but the host adapter is not patched' "$PROJECT_ROOT/README.md"
-grep -Fq 'Paste this prompt into Codex on your Mac—never into Grok Bot.' "$PROJECT_ROOT/README.md"
-grep -Fq 'A displayed beta.46 runtime version does not override this test.' "$PROJECT_ROOT/README.md"
+(cd "$PROJECT_ROOT" && node scripts/verify-release.mjs >/dev/null)
 grep -Fq 'id: install_source' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
 grep -Fq 'id: literal_provider_result' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
 grep -Fq 'id: host_adapter_result' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
@@ -228,26 +220,23 @@ TEST_RUNTIME="$TEMPORARY/runtime"
 TEST_BIN="$TEMPORARY/bin"
 TEST_GROK_SKILLS="$TEMPORARY/grok-skills"
 
-# Structural verification: the fixture hash is not on the exact list, so the
-# adapter must be accepted through anchor verification (no development
-# override) when the manifest policy permits the fixture's size, and refused
-# with a complete fingerprint when the policy is disabled.
+# A syntactically compatible unknown host must remain untouched even when
+# an independently trusted backup already exists. Exercise the real installer.
 ANCHOR_RUNTIME="$TEMPORARY/anchor-runtime"
 ANCHOR_HOST="$TEMPORARY/anchor-host-main.cjs"
 ANCHOR_BACKUP="$TEMPORARY/anchor-host-main.cjs.stock"
-ANCHOR_MANIFEST="$TEMPORARY/anchor-manifest.json"
 STRICT_MANIFEST="$TEMPORARY/strict-manifest.json"
-python3 - "$PAYLOAD/patch/manifests/0.30.0.json" "$ANCHOR_MANIFEST" "$STRICT_MANIFEST" <<'PY'
-import json
-import sys
-
+python3 - "$PAYLOAD/patch/manifests/0.30.0.json" "$STRICT_MANIFEST" "$HOST_FIXTURE" <<'PYS'
+import hashlib,json,sys
 manifest = json.load(open(sys.argv[1]))
-manifest["anchorVerifiedHosts"] = {"enabled": True, "minBytes": 0, "maxBytes": 0}
+stock = open(sys.argv[3], "rb").read()
+manifest["stockHosts"] = [{"sha256": hashlib.sha256(stock).hexdigest(), "bytes": len(stock)}]
 json.dump(manifest, open(sys.argv[2], "w"))
-manifest["anchorVerifiedHosts"] = {"enabled": False}
-json.dump(manifest, open(sys.argv[3], "w"))
-PY
+PYS
+cp "$HOST_FIXTURE" "$ANCHOR_BACKUP"
 cp "$HOST_FIXTURE" "$ANCHOR_HOST"
+printf '\n// unreviewed host replacement\n' >> "$ANCHOR_HOST"
+cp "$ANCHOR_HOST" "$TEMPORARY/expected-rejected-host"
 mkdir -p "$ANCHOR_RUNTIME"
 STRICT_FAILURE="$(ROUTER_PATCH_HOST="$ANCHOR_HOST" \
 ROUTER_PATCH_BACKUP="$ANCHOR_BACKUP" \
@@ -262,32 +251,8 @@ bash "$PAYLOAD/remote/install.sh" \
 grep -q 'GROKROUTER_STRICT9_INSTALL_FAILED_APPLY_ADAPTER_NEW_STOCK_HOST' <<<"$STRICT_FAILURE"
 grep -q 'HOSTTRUST=NONE' <<<"$STRICT_FAILURE"
 grep -q 'PATCHDRYRUN=PASS' <<<"$STRICT_FAILURE"
-cmp "$HOST_FIXTURE" "$ANCHOR_HOST"
-[[ ! -e "$ANCHOR_BACKUP" ]]
-ROUTER_PATCH_HOST="$ANCHOR_HOST" \
-ROUTER_PATCH_BACKUP="$ANCHOR_BACKUP" \
-ROUTER_PATCH_MANIFEST="$ANCHOR_MANIFEST" \
-ROUTER_BIN_DIR="$TEMPORARY/anchor-bin" \
-ROUTER_GROK_SKILLS_ROOT="$TEMPORARY/anchor-grok-skills" \
-ROUTER_INSTALL_ATTEMPT=ANCHOR9 \
-bash "$PAYLOAD/remote/install.sh" \
-  --install-root "$ANCHOR_RUNTIME" \
-  --providers openrouter \
-  --no-restart \
-  >"$TEMPORARY/install-anchor.log"
-grep -q 'GROKROUTER_ANCHOR9_PHASE_COMPLETE' "$TEMPORARY/install-anchor.log"
-grep -q 'anchor-verified stock host' "$TEMPORARY/install-anchor.log"
-grep -q '"stockBackupTrust": "anchor-verified"' "$TEMPORARY/install-anchor.log"
-grep -q 'GROKBOT_MODEL_ROUTER_V45' "$ANCHOR_HOST"
+cmp "$TEMPORARY/expected-rejected-host" "$ANCHOR_HOST"
 cmp "$HOST_FIXTURE" "$ANCHOR_BACKUP"
-python3 "$ANCHOR_RUNTIME/patch/router_patch.py" \
-  --restore \
-  --host "$ANCHOR_HOST" \
-  --backup "$ANCHOR_BACKUP" \
-  --manifest "$ANCHOR_MANIFEST" \
-  --json \
-  >/dev/null
-cmp "$HOST_FIXTURE" "$ANCHOR_HOST"
 
 cp "$HOST_FIXTURE" "$TEST_HOST"
 mkdir -p "$TEST_RUNTIME"

@@ -31,13 +31,22 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: grok_bot_version
+    attributes:
+      label: Grok Bot desktop version
+      description: Enter the official desktop app version separately from the GrokRouter version. State whether Grok Bot updated after installation or before this failure.
+      placeholder: "0.30.0; updated to 0.36.0 before Repair"
+    validations:
+      required: true
+
   - type: dropdown
     id: install_source
     attributes:
       label: Installation source
       description: Choose the exact package or command you ran. The pinned Terminal command is macOS-only. Old forks and downloaded copies can contain an earlier router even when this README is current.
       options:
-        - Pinned beta.46 Mac Terminal command from the official README
+        - Pinned Mac Terminal command from the official README
         - Windows x64 CI preview artifact
         - Windows Arm64 CI preview artifact
         - ZIP downloaded from the official repository
@@ -89,7 +98,7 @@ body:
     id: safe_diagnostics
     attributes:
       label: Safe diagnostics
-      description: In the GrokRouter desktop app, click Copy safe diagnostics and paste the entire report once. Beta.46 includes the non-secret host fingerprint for a genuinely new stock variant. Windows reports from source after beta.46 also preserve the last installer phase and fingerprint lines.
+      description: In the GrokRouter desktop app, click Copy safe diagnostics and paste the entire report once. Include the host fingerprint and last installer phase. An unsupported app version and an unknown cloud-host hash are different failures.
       render: text
     validations:
       required: true

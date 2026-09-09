@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPOSITORY="promptadvisers/grokrouter"
-SOURCE_REF="source-v0.1.0-beta.46"
+SOURCE_REF="source-v0.1.0-beta.47"
 SOURCE_ROOT=""
 TEMP_SOURCE=""
 

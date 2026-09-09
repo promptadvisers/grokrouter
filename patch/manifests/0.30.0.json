@@ -19,7 +19,7 @@
   ],
   "routerMarker": "GROKBOT_MODEL_ROUTER_V45",
   "anchorVerifiedHosts": {
-    "enabled": true,
+    "enabled": false,
     "minBytes": 20000000,
     "maxBytes": 40000000
   }

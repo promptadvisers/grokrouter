@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -35,7 +36,6 @@ DEFAULT_MANIFEST = Path(__file__).with_name("manifests") / "0.30.0.json"
 # mistaken for a stock host, so structural verification refuses it outright.
 FOREIGN_MARKER = re.compile(r"opengrok|open_grok", re.IGNORECASE)
 TRUST_EXACT = "exact-allowlist"
-TRUST_ANCHOR = "anchor-verified"
 TRUST_CACHE_SUFFIX = ".grokrouter-trust.json"
 
 
@@ -115,7 +115,7 @@ function appendGrokBotRouterHostError(config, error) {
     const auditPath = config?.auditPath || "/home/box/sand-data/grokbot-router/audit.jsonl";
     require("node:fs").appendFileSync(auditPath, `${JSON.stringify({
       timestamp: new Date().toISOString(),
-      version: "0.1.0-beta.46",
+      version: "0.1.0-beta.47",
       event: "host_bridge_error",
       diagnostic
     })}\n`, { encoding: "utf8", mode: 0o600 });
@@ -313,13 +313,10 @@ def validate_stock_hosts(value: Any, label: str) -> list[dict[str, Any]]:
 
 
 def validate_anchor_policy(value: Any) -> dict[str, Any]:
-    """Normalize the manifest policy for structurally verified stock hosts.
+    """Read legacy size-band settings for diagnostics only.
 
-    Absent or disabled means the historical behavior: only an exact SHA-256 and
-    byte-count pair is accepted. Enabled means a host that carries no router
-    marker, matches every source anchor exactly once, survives a read-only
-    patch plus ``node --check``, and falls inside the byte-count band is also
-    accepted as stock and backed up before it is patched.
+    The historical enabled flag never grants stock provenance. Only reviewed
+    hash/size pairs authorize installation, restoration, or automatic repair.
     """
     if value is None:
         return {"enabled": False, "minBytes": 0, "maxBytes": 0}
@@ -411,7 +408,7 @@ def anchor_verification(
     manifest: dict[str, Any],
     digest: str | None = None,
 ) -> dict[str, Any]:
-    """Structurally verify that ``path`` is an unmodified stock host.
+    """Check structural compatibility for diagnostics, never stock provenance.
 
     Returns ``{"ok", "reason", "patchDryRun"}``. The verdict is cached beside
     the file, keyed by its SHA-256, byte count, router marker version, and the
@@ -427,6 +424,7 @@ def anchor_verification(
         "sha256": digest,
         "bytes": byte_count,
         "marker": MARKER,
+        "trustPolicy": "exact-stock-v1",
         "anchors": list(manifest.get("requiredAnchors", [])),
         "policy": policy,
     }
@@ -459,8 +457,7 @@ def anchor_verification(
             elif not policy["enabled"]:
                 result["reason"] = "structural verification is disabled by the compatibility manifest"
             else:
-                result["ok"] = True
-                result["reason"] = "ok"
+                result["reason"] = "an exact reviewed stock-host hash and byte count are required"
     try:
         cache_path.write_text(json.dumps({"key": cache_key, "result": result}, sort_keys=True) + "\n")
         os.chmod(cache_path, 0o600)
@@ -479,8 +476,6 @@ def host_trust(
         return None
     if is_allowed_stock(path, manifest, registry):
         return TRUST_EXACT
-    if anchor_verification(path, manifest)["ok"]:
-        return TRUST_ANCHOR
     return None
 
 
@@ -511,16 +506,12 @@ def inspect_host(
     verification = anchor_verification(host, manifest, digest)
     if is_allowed_stock(host, manifest, registry):
         trust: str | None = TRUST_EXACT
-    elif verification["ok"]:
-        trust = TRUST_ANCHOR
     else:
         trust = None
     if MARKER in source:
         status = "patched"
     elif trust == TRUST_EXACT:
         status = "known-stock"
-    elif trust == TRUST_ANCHOR:
-        status = "anchor-verified-stock"
     else:
         status = "unknown-stock-candidate"
     return {
@@ -641,6 +632,34 @@ def timestamp_backup(path: Path, label: str) -> Path:
     return destination
 
 
+def matches_adapter(host: Path, stock: Path, manifest: dict[str, Any], previous: bool = False) -> bool:
+    """Authenticate router output by reconstructing it from a trusted original.
+
+    A marker alone is not evidence that we wrote a file. Callers must first
+    verify the stock hash/size against the reviewed manifest or registry.
+    """
+    if not host.exists() or not stock.exists():
+        return False
+    try:
+        original = stock.read_text()
+        validate_anchors(original, manifest)
+        if previous:
+            spec = importlib.util.spec_from_file_location(
+                "grokrouter_previous_adapter", Path(__file__).with_name("previous_adapter.py")
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            expected = module.patch_text(original)
+            module.EXECUTOR_CODE = module.EXECUTOR_CODE.replace('version: "0.1.0-beta.46"', 'version: "0.1.0-beta.45"')
+            if host.read_bytes() == module.patch_text(original).encode("utf-8"):
+                return True
+        else:
+            expected = patch_text(original)
+        return host.read_bytes() == expected.encode("utf-8")
+    except Exception:
+        return False
+
+
 def verified_stock_source(
     host: Path,
     backup: Path,
@@ -648,15 +667,23 @@ def verified_stock_source(
     allow_unknown: bool,
     registry: dict[str, Any] | None = None,
 ) -> Path:
-    if host.exists() and MARKER not in host.read_text(errors="replace") and not LEGACY_MARKER.search(host.read_text(errors="replace")):
-        if allow_unknown or is_trusted_stock(host, manifest, registry):
-            return host
-    for candidate in (backup, *LEGACY_BACKUPS):
-        if candidate.exists() and (allow_unknown or is_trusted_stock(candidate, manifest, registry)):
-            return candidate
+    if host.exists():
+        current = host.read_text(errors="replace")
+        if MARKER not in current and not LEGACY_MARKER.search(current):
+            if allow_unknown or is_trusted_stock(host, manifest, registry):
+                return host
+        else:
+            # An upgrade may use a backup only when it reproduces the live
+            # router output exactly. Unknown replacements and foreign routers
+            # must never be silently downgraded from an older backup.
+            for candidate in (backup, *LEGACY_BACKUPS):
+                if candidate.exists() and (allow_unknown or is_trusted_stock(candidate, manifest, registry)):
+                    if matches_adapter(host, candidate, manifest) or matches_adapter(host, candidate, manifest, previous=True):
+                        return candidate
     reason = anchor_verification(host, manifest)["reason"] if host.exists() else "host file is missing"
     raise PatchError(
         f"This Grok Bot computer's host did not pass GrokRouter's stock-host checks: {reason}. "
+        "The live host was not replaced from a backup. Use explicit Restore Stock only when appropriate. "
         "Nothing was changed.\n"
         f"{compatibility_report(host, manifest, registry)}\n"
         f"SUPPORTEDVERSION={manifest.get('grokBotVersion')}"
@@ -673,15 +700,14 @@ def install(
 ) -> dict[str, Any]:
     if not host.exists():
         raise PatchError(f"Host not found: {host}")
-    current = host.read_text()
-    if MARKER in current:
+    stock = verified_stock_source(host, backup, manifest, allow_unknown, registry)
+    if matches_adapter(host, stock, manifest):
         return {
             "ok": True,
             "status": "already-installed",
             "host": str(host),
             "hostSha256": sha256(host),
         }
-    stock = verified_stock_source(host, backup, manifest, allow_unknown, registry)
     trust = host_trust(stock, manifest, registry) or ("development-override" if allow_unknown else None)
     source = stock.read_text()
     validate_anchors(source, manifest)
@@ -694,9 +720,9 @@ def install(
             "status": "dry-run",
             "stock": str(stock),
             "stockSha256": sha256(stock),
-            "stockBytes": len(source),
+            "stockBytes": len(source.encode("utf-8")),
             "stockTrust": trust,
-            "patchedBytes": len(patched),
+            "patchedBytes": len(patched.encode("utf-8")),
         }
 
     # Grok rotates stock hosts behind the same app version. Keep the backup in
@@ -777,8 +803,10 @@ def doctor(
             and MARKER in host_text
             and backup_exists
             and (allow_unknown or backup_trust is not None)
+            and matches_adapter(host, backup, manifest)
         ),
         "status": "installed" if MARKER in host_text else "stock-or-unknown",
+        "hostAdapterVerified": bool((allow_unknown or backup_trust is not None) and matches_adapter(host, backup, manifest)),
         "routerMarker": MARKER in host_text,
         "legacyMarker": bool(LEGACY_MARKER.search(host_text)),
         "host": str(host),

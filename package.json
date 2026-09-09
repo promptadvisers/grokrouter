@@ -1,10 +1,10 @@
 {
   "name": "grokrouter",
-  "version": "0.1.0-beta.46",
+  "version": "0.1.0-beta.47",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "npm run test:runtime && npm run test:patch && npm run test:installer && npm run test:windows",
+    "test": "npm run test:runtime && npm run test:patch && npm run test:installer && npm run test:windows && npm run test:release",
     "test:runtime": "node --test tests/runtime.test.mjs",
     "test:patch": "python3 -m unittest tests/test_patch.py",
     "test:installer": "bash tests/installer.test.sh",
@@ -12,7 +12,8 @@
     "build:payload": "bash scripts/build-payload.sh",
     "build:macos": "bash scripts/build-macos-app.sh",
     "build:windows": "bash scripts/build-windows-app.sh",
-    "build": "npm run test && npm run build:macos"
+    "build": "npm run test && npm run build:macos",
+    "test:release": "node --test tests/release.test.mjs"
   },
   "engines": {
     "node": ">=18"

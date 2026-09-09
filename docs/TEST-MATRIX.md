@@ -1,6 +1,8 @@
 # Verification matrix
 
-Research/build lock: 2026-09-01. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.46.
+Maintenance source lock: 2026-09-08. Router candidate: 0.1.0-beta.47. Exact-candidate live acceptance is pending. Historical rows below retain their explicitly named tested versions.
+
+The candidate restores exact hash/size acceptance, authenticates adapter upgrades by reconstruction, rejects unknown replacements even with a trusted backup, and scopes channel receipts to a host request. These changes have automated evidence; they do not inherit beta.45 live results. See `release-acceptance.json` for the release decision.
 
 | Claim | Automated evidence | Live evidence | Status |
 | --- | --- | --- | --- |

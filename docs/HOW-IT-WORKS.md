@@ -26,7 +26,7 @@ The native macOS installer—and the source-preview Windows shell built around t
 2. It restarts Grok Bot with a temporary diagnostic connection bound only to `127.0.0.1` on the local computer.
 3. It opens an existing Bot computer and verifies that its Terminal is really focused before typing anything.
 4. It transfers a small compressed payload through Grok's own remote-computer connection. The payload is checked with SHA-256 before extraction.
-5. Inside the Bot computer, it installs pinned runtime dependencies and verifies the stock host. A host is accepted from the exact signed hash-and-byte-count list, or by structural verification: no router marker, every source anchor exactly once, a read-only patch that passes `node --check`, and a plausible file size. Grok rotates 0.30.0 host builds often, so the structural path is what most installs use. The untouched host is saved under persistent `sand-data` storage before it is patched.
+5. Inside the Bot computer, it installs pinned runtime dependencies and requires an exact reviewed stock-host SHA-256 and byte count. The entry comes from the bundled manifest or an Ed25519-signed registry. Every source anchor must match exactly once, and the transformed code must pass `node --check`. Structural similarity alone never authenticates a stock host. The untouched original is stored under persistent `sand-data` before patching.
 6. It injects one narrow executor into the known host. The larger provider logic remains in a separate runtime that can be replaced or removed independently.
 7. It restarts the Grok host, verifies a real success marker, closes the diagnostic connection and reopens Grok Bot normally.
 
@@ -58,7 +58,7 @@ Commands such as `/models`, `/provider`, `/doctor`, and `/router doctor` are han
 5. The matching result returns to the same provider thread.
 6. Only then does the provider produce the final chat answer.
 
-The router will not execute a provider's printed imitation of a tool call when Grok supplied no matching schema. The latest OpenRouter Shell gate had zero actionable host schemas, so the request correctly remained inert. Computer, Screenshot and sub-agent parity are therefore not current beta.38 claims even though the bridge and automated contracts exist.
+The router will not execute a provider's printed imitation of a tool call when Grok supplied no matching schema. The latest OpenRouter Shell gate had zero actionable host schemas, so the request correctly remained inert. Computer, Screenshot and sub-agent parity are therefore not blanket current-release claims even though the bridge and automated contracts exist.
 
 ## What stays, what changes
 
@@ -96,7 +96,7 @@ Read [SECURITY.md](../SECURITY.md) for the security boundary and [ARCHITECTURE.m
 - `grokbot-router enable` turns routing back on.
 - A future Grok Bot version is unsupported until its exact host is inspected, its hash and anchors are added, and the complete automated plus fresh-Bot live gate passes.
 
-The exact beta.38 artifact completed install, verified restore, reinstall and a post-cycle fresh-Bot proof. See [TEST-MATRIX.md](TEST-MATRIX.md) for the evidence rather than relying on the diagram as a test claim.
+The latest recorded complete Mac control lifecycle is beta.45; the maintenance candidate must repeat its own full live gate. See [TEST-MATRIX.md](TEST-MATRIX.md) for the evidence rather than relying on the diagram as a test claim.
 
 ## Suggested 55-second YouTube narration
 

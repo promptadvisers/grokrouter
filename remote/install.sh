@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROUTER_VERSION="0.1.0-beta.46"
+ROUTER_VERSION="0.1.0-beta.47"
 PAYLOAD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_ROOT="/home/box/sand-data/grokbot-router"
 INSTALL_PARENT="/home/box/sand-data"
@@ -172,6 +172,7 @@ cp "$PAYLOAD_ROOT/runtime/package-lock.json" "$STAGE_ROOT/package-lock.json"
 cp "$PAYLOAD_ROOT/runtime/provider.default.json" "$STAGE_ROOT/provider.json"
 mkdir -p "$STAGE_ROOT/patch/manifests" "$STAGE_ROOT/bin" "$STAGE_ROOT/skills" "$STAGE_ROOT/compatibility"
 cp "$PAYLOAD_ROOT/patch/router_patch.py" "$STAGE_ROOT/patch/router_patch.py"
+cp "$PAYLOAD_ROOT/patch/previous_adapter.py" "$STAGE_ROOT/patch/previous_adapter.py"
 cp "$PAYLOAD_ROOT/patch/manifests/0.30.0.json" "$STAGE_ROOT/patch/manifests/0.30.0.json"
 cp "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json" "$STAGE_ROOT/compatibility/0.30.0-hosts.json"
 cp "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json.sig" "$STAGE_ROOT/compatibility/0.30.0-hosts.json.sig"
@@ -345,14 +346,9 @@ if ! ADAPTER_OUTPUT="$(run_adapter_patch 2>&1)"; then
   fi
 fi
 printf '%s\n' "$ADAPTER_OUTPUT"
-# Tell the desktop installer which trust tier accepted this host. A host that
-# is not on the exact signed list can still be accepted when it carries no
-# router marker, matches every source anchor exactly once, and passes the
-# read-only patch plus node --check. The untouched host is backed up first.
+# Structural diagnostics never authorize a host. Only the exact reviewed
+# hash/size pair is accepted in a normal installation.
 case "$ADAPTER_OUTPUT" in
-  *'"stockTrust": "anchor-verified"'*)
-    printf 'Host accepted by structural verification (anchor-verified stock host); stock backup saved.\n'
-    ;;
   *'"stockTrust": "exact-allowlist"'*)
     printf 'Host accepted from the exact signed compatibility list; stock backup saved.\n'
     ;;
