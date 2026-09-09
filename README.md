@@ -4,20 +4,20 @@
 
 GrokRouter is an experimental, unofficial, reversible model router. Each Bot remembers its own provider and model. Grok Bot continues to own conversations, files, the computer, permissions, and any outer tools it supplies to the routed model. Native maintenance sessions such as memory synthesis keep Grok's original inference backend.
 
-> **Maintenance candidate:** This branch prepares `0.1.0-beta.47`. It is not released or live-verified yet. The pinned command below continues to reference the published beta.46 source until the replacement tag exists. beta.46 uses structural host acceptance; this candidate restores exact reviewed hash-and-size verification and repairs unsafe backup fallback.
+> **Maintenance candidate:** This branch prepares `0.1.0-beta.47`. It has passed the complete live acceptance procedure on official Grok Bot 0.30.0 and 0.36.0 and is awaiting publication. The pinned command below continues to reference the published beta.46 source until the replacement tag exists. beta.46 uses structural host acceptance; this candidate restores exact reviewed hash-and-size verification and repairs unsafe backup fallback.
 
 ## Compatibility
 
 | Component | Current boundary |
 | --- | --- |
-| Grok Bot desktop | Published beta.46: **0.30.0**. Candidate beta.47: exact **0.30.0 and 0.36.0** gates, with live acceptance still pending |
+| Grok Bot desktop | Published beta.46: **0.30.0**. Candidate beta.47: exact **0.30.0 and 0.36.0** gates, with separate complete live acceptance |
 | macOS | Apple silicon, macOS 12+, Apple Command Line Tools |
 | Windows x64 / Arm64 | Source preview; CI packaging is separate from native installation verification |
 | Codex SDK | Sign in with your existing Codex account in the Bot computer |
 | OpenRouter | Your OpenRouter API key; provider usage is billed by OpenRouter |
 | Computer and sub-agents | Available only when Grok offers the necessary schemas; see the [verification matrix](docs/TEST-MATRIX.md) for provider-specific evidence |
 
-**Already updated Grok Bot?** The published beta.46 installer cannot support 0.36.0. This candidate adds a separately verified 0.36.0 desktop gate and signed host registry; it is still undergoing live acceptance. Other versions remain unsupported. Reports are tracked in [#1](https://github.com/promptadvisers/grokrouter/issues/1) and [#7](https://github.com/promptadvisers/grokrouter/issues/7). A successful source build does not establish compatibility with a newer Grok app or cloud host.
+**Already updated Grok Bot?** The published beta.46 installer cannot support 0.36.0. This candidate adds a separately verified 0.36.0 desktop gate and signed host registry; it has passed the exact-artifact live acceptance gates. Other versions remain unsupported. Reports are tracked in [#1](https://github.com/promptadvisers/grokrouter/issues/1) and [#7](https://github.com/promptadvisers/grokrouter/issues/7). A successful source build does not establish compatibility with a newer Grok app or cloud host.
 
 ## Install on a Mac
 
@@ -60,7 +60,7 @@ The ZIP alternative is **Code → Download ZIP → Install GrokRouter.command**.
 | `/router reset` | Reset the Bot's provider thread while retaining its Grok transcript |
 | `/router help` | Show exact supported controls |
 
-In a channel, address a Bot directly, for example `@Research Bot /provider`. Each Bot owns its model state. A control receipt suppresses only follow-on work associated with that same host request; it must not suppress an unrelated conversation. Exact-candidate channel verification is part of the release gate.
+In a channel, address a Bot directly, for example `@Research Bot /provider`. Each Bot owns its model state. A control receipt suppresses only follow-on work associated with that same host request; it must not suppress an unrelated conversation. Addressed channel controls passed the exact-candidate release gate on both supported versions.
 
 ## Recovery
 

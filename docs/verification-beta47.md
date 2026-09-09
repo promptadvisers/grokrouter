@@ -1,5 +1,7 @@
 # Beta.47 verification record
 
+Final production revision `644a9c4` passed all seven required gates on both official desktop versions. See [the final matrix](TEST-MATRIX.md), [0.30.0 evidence](acceptance-beta47-644a9c4-0.30.0.md), and [0.36.0 evidence](acceptance-beta47-644a9c4-0.36.0.md). The entries below are chronological development history; their pending and failed statuses belong to their named revisions.
+
 This is a partial maintenance record, not release acceptance. Times below are UTC on September 9, 2026 unless explicitly described as local. Only the dated build named in a receipt owns that result. `release-acceptance.json` remains pending.
 
 ## Automated and source-build evidence
